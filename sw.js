@@ -1,6 +1,6 @@
 /* SAFA Inspector — service worker.
    ВАЖНО: при любой правке index.html / app.js / data/* поднимать CACHE. */
-const CACHE = 'safa-inspector-v1.1.0';
+const CACHE = 'safa-inspector-v1.2.0';
 
 const ASSETS = [
   './',
@@ -9,13 +9,28 @@ const ASSETS = [
   './data/checklist.js',
   './data/findings.js',
   './data/photos.js',
+  './data/photos-manifest.json',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];
 
+// Оболочка обязана закэшироваться. Фотопримеры (~12 МБ) кладём отдельно и
+// поштучно: одна недоступная картинка не должна валить установку целиком.
+async function cachePhotos(cache) {
+  try {
+    const list = await fetch('./data/photos-manifest.json').then(r => r.json());
+    await Promise.allSettled(list.map(u => cache.add('./' + u)));
+  } catch (e) { /* примеры догрузятся при первом просмотре */ }
+}
+
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    await c.addAll(ASSETS);
+    self.skipWaiting();
+    await cachePhotos(c);
+  })());
 });
 
 self.addEventListener('activate', e => {

@@ -3,7 +3,7 @@
    База находок: EASA RIM Appendix 1, Issue 6 (INST.RI.01/006). */
 'use strict';
 
-const APP_VER = '1.1.0';
+const APP_VER = '1.2.0';
 
 /* ══════════════ справочные константы ══════════════ */
 
@@ -1318,6 +1318,13 @@ async function scrSet() {
         'Развёртывание бэкенда — файл gas/Code.gs в папке проекта (README, раздел «Синхронизация»).')),
 
     el('div', { cls: 'card' },
+      el('h3', {}, 'Офлайн-готовность'),
+      el('div', { cls: 'xs mut', style: 'margin-bottom:8px' },
+        `Справочных изображений: ${REF_PHOTOS.length}. На перроне связи нет — они должны лежать в устройстве.`),
+      el('div', { id: 'offlineState', cls: 'sm mut' }, 'Проверка…'),
+      el('button', { cls: 'btn wide sp', onclick: cachePhotosNow }, '⬇ Загрузить примеры в устройство')),
+
+    el('div', { cls: 'card' },
       el('h3', {}, 'Данные'),
       el('button', { cls: 'btn sec wide', onclick: exportAll }, '⬇ Выгрузить все инспекции (JSON)'),
       el('button', { cls: 'btn sec wide sp', onclick: () => location.reload(true) }, '↻ Обновить приложение')),
@@ -1328,6 +1335,39 @@ async function scrSet() {
       el('div', {}, 'Источник: EASA Ramp Inspection Manual, Appendix 1 — Inspection instructions and pre-described findings, Issue 6 (INST.RI.01/006, 28.10.2022).'),
       el('div', { cls: 'sp' }, 'Категорирование и классы мер — по RIM и бланку PI АГА РТ.')),
   ]);
+  offlineStatus();
+}
+
+// Сколько справочных изображений уже лежит в кэше — на перроне связи нет
+async function offlineStatus() {
+  const box = $('#offlineState');
+  if (!box) return;
+  if (!('caches' in window) || !REF_PHOTOS.length) {
+    box.textContent = REF_PHOTOS.length ? 'Кэш недоступен в этом браузере.' : 'Изображений нет.';
+    return;
+  }
+  const keys = await caches.keys();
+  const c = keys.length ? await caches.open(keys[0]) : null;
+  if (!c) { box.textContent = 'Кэш пуст — нажмите «Загрузить примеры».'; return; }
+  let have = 0;
+  for (const p of REF_PHOTOS) if (await c.match('./' + p.file)) have++;
+  box.innerHTML = '';
+  box.append(
+    el('div', { cls: 'bar' }, el('i', { style: `width:${have / REF_PHOTOS.length * 100}%` })),
+    el('div', { cls: 'xs sp' }, have === REF_PHOTOS.length
+      ? `✓ Все ${have} изображений в устройстве — офлайн готов.`
+      : `В устройстве ${have} из ${REF_PHOTOS.length}. Загрузите остальные по Wi-Fi.`));
+}
+
+async function cachePhotosNow() {
+  if (!REF_PHOTOS.length) return toast('Изображений нет');
+  const keys = await caches.keys();
+  const c = await caches.open(keys[0] || 'safa-inspector-manual');
+  toast('Загрузка примеров…');
+  const r = await Promise.allSettled(REF_PHOTOS.map(p => c.add('./' + p.file)));
+  const bad = r.filter(x => x.status === 'rejected').length;
+  toast(bad ? `Загружено с ошибками: не удалось ${bad}` : 'Примеры загружены в устройство');
+  offlineStatus();
 }
 
 async function exportAll() {

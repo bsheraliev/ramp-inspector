@@ -358,23 +358,34 @@ def stage():
 
 
 def build():
-    """curation.json: [{"cand","item","verdict","title_ru","caption_ru"}] — только
-    отобранные вручную записи; остальное отбрасывается."""
+    """curation.json: [{"cand","item","verdict","kind","title_ru","caption_ru"}] —
+    только отобранные вручную записи; остальное отбрасывается.
+    "cand" ссылается либо на кандидата из candidates.json (растровые картинки,
+    лежат в STAGE), либо на слайд курса Dubai из slides/slides.json.
+    Необязательное поле "rotate" — доворот скана в градусах (сканы раздатки
+    местами перевёрнуты, автоматика ловит не всё)."""
     # отбор человеком хранится рядом со скриптом (в репозитории), иначе — в STAGE
     cur_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "curation-pdf.json")
     if not os.path.exists(cur_path):
         cur_path = os.path.join(STAGE, "curation.json")
-    cands = {
-        c["cand"]: c
-        for c in json.load(open(os.path.join(STAGE, "candidates.json"), encoding="utf-8"))
-    }
+    cands, where = {}, {}
+    for c in json.load(open(os.path.join(STAGE, "candidates.json"), encoding="utf-8")):
+        cands[c["cand"]] = c
+        where[c["cand"]] = STAGE
+    sl = os.path.join(SLIDE_STAGE, "slides.json")
+    if os.path.exists(sl):
+        for c in json.load(open(sl, encoding="utf-8")):
+            cands[c["cand"]] = c
+            where[c["cand"]] = SLIDE_STAGE
     cur = json.load(open(cur_path, encoding="utf-8"))
     photos_dir = os.path.join(PROJ, "photos")
     os.makedirs(photos_dir, exist_ok=True)
     index = []
     for i, rec in enumerate(cur, 1):
         c = cands[rec["cand"]]
-        im = Image.open(os.path.join(STAGE, rec["cand"])).convert("RGB")
+        im = Image.open(os.path.join(where[rec["cand"]], rec["cand"])).convert("RGB")
+        if rec.get("rotate"):
+            im = im.rotate(rec["rotate"], expand=True)
         if max(im.size) > MAX_SIDE:
             k = MAX_SIDE / float(max(im.size))
             im = im.resize((int(im.width * k), int(im.height * k)), Image.LANCZOS)
@@ -385,9 +396,9 @@ def build():
             {
                 "id": "pdf-%03d" % i,
                 "file": "photos/" + fname,
-                "kind": rec.get("kind", "photo"),  # photo | scheme
                 "item": rec.get("item"),
                 "verdict": rec.get("verdict"),
+                "kind": rec.get("kind", "photo"),  # photo | scheme
                 "title_ru": rec.get("title_ru", ""),
                 "caption_ru": rec.get("caption_ru", ""),
                 "source": "%s, с. %s" % (c["src_file"], pg)
