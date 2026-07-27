@@ -17,6 +17,8 @@
 import os, sys, io, json, re, hashlib, zipfile
 
 import fitz  # pymupdf
+import numpy as np
+import cv2
 from PIL import Image
 
 ROOT = r"C:\Users\user\Desktop\SSD 2025\01 Работа\Надзор (Oversight)\7 SAFA"
@@ -35,6 +37,26 @@ SOURCES = [
     r"SAFA 2026\SAFA PPP ACIC 2026\Сп Док\2024 Довідник SAFA інспектора.docx",
     r"SAFA 2026\SAFA PPP ACIC 2026\PPSAFA\SAFA PPP ACIC 2024\ICAO-SAFA-Ramp-Inspections-Part 1 RI ICAO NAU-страницы.pdf",
     r"SAFA 2026\SAFA PPP ACIC 2026\PPSAFA\SAFA PPP ACIC 2024\ICAO-SAFA-Ramp-Inspections-Part 2 RI ICAO NAU-страницы.pdf",
+    # --- дополнение (2-й заход). Дописывать ТОЛЬКО в конец списка: нумерация
+    # кандидатов сквозная и зависит от порядка, иначе поедут ссылки в curation.
+    r"SAFA 2026\SAFA PPP ACIC 2026\Сп Док\Manual of SAFA findings an.pdf",
+    r"SAFA 2026\SAFA PPP ACIC 2026\Сп Док\2010_Posobie1.pdf",
+    r"SAFA 2026\SAFA PPP ACIC 2026\Сп Док\Контрольный лист проверки ВС Методика SAFA_Изм.4 (4).docx",
+    r"SAFA 2026\SAFA PPP ACIC 2026\Сп Док\avoiding-the-pain-of-a-ramp-check.pdf",
+    r"SAFA 2026\SAFA PPP ACIC 2026\Сп Док\BP_1(5).pdf",
+    r"SAFA 2026\SAFA PPP ACIC 2026\Сп Док\20210114150815_87393.pdf",
+    "об инcпектировании экспл ВТ_13 SAFA.pdf",
+    "Inspecting instructions and PDFs - Issue 3 - Corrigendum 1.pdf",
+    "rim_appendix1-inspections_instructions_pdfs-issue_5.1.pdf",
+    r"Ramp Inspection Programme Dubai Apr 2015\Ramp Inspection Programme Dubai Apr 2015\0.pdf",
+    r"Ramp Inspection Programme Dubai Apr 2015\Ramp Inspection Programme Dubai Apr 2015\0-1.pdf",
+    r"Ramp Inspection Programme Dubai Apr 2015\Ramp Inspection Programme Dubai Apr 2015\1.pdf",
+    r"Ramp Inspection Programme Dubai Apr 2015\Ramp Inspection Programme Dubai Apr 2015\2.pdf",
+    r"Ramp Inspection Programme Dubai Apr 2015\Ramp Inspection Programme Dubai Apr 2015\3.pdf",
+    r"Ramp Inspection Programme Dubai Apr 2015\Ramp Inspection Programme Dubai Apr 2015\4.pdf",
+    r"Ramp Inspection Programme Dubai Apr 2015\Ramp Inspection Programme Dubai Apr 2015\5.pdf",
+    r"Ramp Inspection Programme Dubai Apr 2015\Ramp Inspection Programme Dubai Apr 2015\6.pdf",
+    r"Ramp Inspection Programme Dubai Apr 2015\Ramp Inspection Programme Dubai Apr 2015\7.pdf",
 ]
 
 MIN_W = MIN_H = 300
@@ -81,6 +103,7 @@ def save_candidate(idx, pil, src, page, text, out, seen, raw=None):
     out.append(
         {
             "cand": name,
+            "md5": h,
             "src_file": src,
             "page": page,
             "w": im.width,
@@ -175,6 +198,139 @@ def extract_docx(path, src, out, seen, counter):
     z.close()
 
 
+"""--- Учебный курс Dubai Apr 2015 --------------------------------------------
+Эти PDF — сканы раздаточного материала: страница = 2 слайда, текстового слоя нет.
+Встроенных картинок-фотографий там нет вообще, фото «вплавлены» в скан страницы.
+Поэтому вырезаем слайд целиком: слайд сам подписан кодом пункта (A01, C04, …)
+и подписью, что даёт готовый наглядный пример без ручной привязки.
+"""
+DUBAI_DIR = os.path.join(
+    ROOT,
+    "Ramp Inspection Programme Dubai Apr 2015",
+    "Ramp Inspection Programme Dubai Apr 2015",
+)
+DUBAI_FILES = ["0.pdf", "0-1.pdf", "1.pdf", "2.pdf", "3.pdf", "4.pdf", "5.pdf",
+               "6.pdf", "7.pdf"]
+SLIDE_STAGE = os.path.join(STAGE, "slides")
+
+
+def find_slides(pil):
+    """Рамки слайдов на скане страницы (обычно 2 на страницу)."""
+    a = np.array(pil.convert("L"))
+    H, W = a.shape
+    dark = (a < 140).astype(np.uint8) * 255
+    dark = cv2.morphologyEx(dark, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    cnts, _ = cv2.findContours(dark, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    out = []
+    for c in cnts:
+        x, y, w, h = cv2.boundingRect(c)
+        if w * h < 0.06 * W * H or w < 0.4 * W:
+            continue
+        if not (1.05 < w / float(h) < 2.0):
+            continue
+        out.append((x, y, w, h))
+    out.sort(key=lambda b: b[1])
+    return out
+
+
+def upside_down(pil):
+    """Часть страниц раздатки отсканирована вверх ногами. Опознаём по синей плашке
+    логотипа EASA: в правильной ориентации она в верхней полосе слайда."""
+    a = np.array(pil.convert("RGB"))
+    b = max(1, int(0.16 * a.shape[0]))
+
+    def blueness(x):
+        hsv = cv2.cvtColor(x, cv2.COLOR_RGB2HSV)
+        return float(
+            ((hsv[:, :, 0] > 95) & (hsv[:, :, 0] < 130)
+             & (hsv[:, :, 1] > 90) & (hsv[:, :, 2] > 60)).mean()
+        )
+
+    return blueness(a[-b:]) > blueness(a[:b]) * 1.5 + 0.002
+
+
+def slide_scores(pil):
+    """blk — доля «плотных» блоков (фото/таблица) под заголовком, col — их цветность,
+    std — разброс яркости внутри блоков (отличает фото от плоской серой плашки)."""
+    a = np.array(pil.convert("RGB"))
+    H, W = a.shape[:2]
+    roi = a[int(0.26 * H) : int(0.97 * H), int(0.02 * W) : int(0.98 * W)]
+    g = cv2.cvtColor(roi, cv2.COLOR_RGB2GRAY)
+    er = cv2.erode((g < 235).astype(np.uint8), np.ones((13, 13), np.uint8))
+    n = int(er.sum())
+    blk = n / float(er.size)
+    if n == 0:
+        return blk, 0.0, 0.0
+    sat = cv2.cvtColor(roi, cv2.COLOR_RGB2HSV)[:, :, 1]
+    col = float(((sat > 60) & (er > 0)).sum()) / n
+    std = float(g[er > 0].std())
+    return blk, col, std
+
+
+def has_content(blk, col, std):
+    if blk < 0.20:
+        return False
+    return col >= 0.02 or std >= 25.0
+
+
+def slides():
+    """Режет сканы курса Dubai на слайды и оставляет те, где есть фото/скан документа."""
+    os.makedirs(SLIDE_STAGE, exist_ok=True)
+    meta, seen, idx = [], set(), 0
+    for fn in DUBAI_FILES:
+        path = os.path.join(DUBAI_DIR, fn)
+        if not os.path.exists(path):
+            print("НЕТ ФАЙЛА:", fn)
+            continue
+        doc = fitz.open(path)
+        kept = 0
+        for pno in range(len(doc)):
+            imgs = doc[pno].get_images(full=True)
+            if not imgs:
+                continue
+            try:
+                d = doc.extract_image(imgs[0][0])
+                page_img = Image.open(io.BytesIO(d["image"]))
+                page_img.load()
+            except Exception:
+                continue
+            for si, (x, y, w, h) in enumerate(find_slides(page_img)):
+                sl = page_img.crop((x, y, x + w, y + h))
+                if upside_down(sl):
+                    sl = sl.rotate(180, expand=True)
+                blk, col, std = slide_scores(sl)
+                if not has_content(blk, col, std):
+                    continue
+                im = sl.convert("RGB")
+                if max(im.size) > MAX_SIDE:
+                    k = MAX_SIDE / float(max(im.size))
+                    im = im.resize((int(im.width * k), int(im.height * k)),
+                                   Image.LANCZOS)
+                b = io.BytesIO()
+                im.save(b, "JPEG", quality=JPEG_Q, optimize=True)
+                hh = hashlib.md5(b.getvalue()).hexdigest()
+                if hh in seen:
+                    continue
+                seen.add(hh)
+                idx += 1
+                name = "slide-%04d.jpg" % idx
+                open(os.path.join(SLIDE_STAGE, name), "wb").write(b.getvalue())
+                meta.append({
+                    "cand": name, "md5": hh,
+                    "src_file": "Dubai Apr 2015/" + fn,
+                    "page": pno + 1, "slot": si,
+                    "w": im.width, "h": im.height,
+                    "blk": round(blk, 3), "col": round(col, 3),
+                    "std": round(std, 1),
+                })
+                kept += 1
+        print("   %-8s страниц %-4d слайдов с содержимым %d" % (fn, len(doc), kept))
+        doc.close()
+    with open(os.path.join(SLIDE_STAGE, "slides.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=1)
+    print("итого слайдов отобрано:", len(meta))
+
+
 def stage():
     os.makedirs(STAGE, exist_ok=True)
     out, seen, counter = [], {}, [0]
@@ -186,6 +342,8 @@ def stage():
             continue
         files += 1
         src = os.path.basename(rel)
+        if "Dubai" in rel:  # файлы называются 0.pdf…7.pdf — без папки не опознать
+            src = "Dubai Apr 2015/" + src
         print("...", src)
         if path.lower().endswith(".docx"):
             extract_docx(path, src, out, seen, counter)
@@ -227,6 +385,7 @@ def build():
             {
                 "id": "pdf-%03d" % i,
                 "file": "photos/" + fname,
+                "kind": rec.get("kind", "photo"),  # photo | scheme
                 "item": rec.get("item"),
                 "verdict": rec.get("verdict"),
                 "title_ru": rec.get("title_ru", ""),
@@ -247,4 +406,4 @@ def build():
 
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "stage"
-    {"stage": stage, "build": build}[mode]()
+    {"stage": stage, "slides": slides, "build": build}[mode]()

@@ -3,7 +3,7 @@
    База находок: EASA RIM Appendix 1, Issue 6 (INST.RI.01/006). */
 'use strict';
 
-const APP_VER = '1.0.0';
+const APP_VER = '1.1.0';
 
 /* ══════════════ справочные константы ══════════════ */
 
@@ -47,17 +47,20 @@ const PDF_BY_ITEM = PDF.reduce((a, f) => ((a[f.item] = a[f.item] || []).push(f),
 
 const DB = (() => {
   let db = null;
-  const NAME = 'safa-inspector', VER = 1;
+  const NAME = 'safa-inspector', VER = 2;
 
   function open() {
     if (db) return Promise.resolve(db);
     return new Promise((res, rej) => {
       const r = indexedDB.open(NAME, VER);
+      // хранилища создаются только если их нет — миграция идемпотентна
+      // и не теряет уже накопленные инспекции при повышении версии
       r.onupgradeneeded = e => {
         const d = e.target.result;
         if (!d.objectStoreNames.contains('insp'))   d.createObjectStore('insp', { keyPath: 'id' });
         if (!d.objectStoreNames.contains('photos')) d.createObjectStore('photos', { keyPath: 'id' });
         if (!d.objectStoreNames.contains('kv'))     d.createObjectStore('kv', { keyPath: 'k' });
+        if (!d.objectStoreNames.contains('lib'))    d.createObjectStore('lib', { keyPath: 'id' });
       };
       r.onsuccess = e => { db = e.target.result; res(db); };
       r.onerror = () => rej(r.error);
@@ -81,8 +84,14 @@ const DB = (() => {
     photoDel: id => tx('photos', 'readwrite', s => s.delete(id)),
     kvGet: k => tx('kv', 'readonly', s => s.get(k)).then(r => r && r.v),
     kvPut: (k, v) => tx('kv', 'readwrite', s => s.put({ k, v })),
+    libAll: () => tx('lib', 'readonly',  s => s.getAll()),
+    libPut: o => tx('lib', 'readwrite', s => s.put(o)),
+    libDel: id => tx('lib', 'readwrite', s => s.delete(id)),
   };
 })();
+
+// Справочные изображения из руководств (data/photos.js). Свои примеры — в хранилище lib.
+const REF_PHOTOS = (window.SAFA_REF_PHOTOS || []).filter(p => p && p.file);
 
 const CFG = {
   d: { inspector: '', inspPost: '', authority: 'Агентство гражданской авиации при Правительстве Республики Таджикистан',
@@ -465,8 +474,32 @@ function scrItem(id) {
       mine.length ? el('div', { cls: 'sp' }, ...mine.map(f => findingRow(f, () => scrItem(id))))
                   : el('div', { cls: 'sm mut sp' }, 'Находок по этому пункту нет.')),
 
+    el('div', { cls: 'card', id: 'exBox' }, el('h3', {}, 'Примеры по пункту'),
+      el('div', { cls: 'sm mut' }, 'Загрузка…')),
+
     el('button', { cls: 'btn sec wide sp', onclick: scrChecklist }, 'К чек-листу'),
   ]);
+
+  // примеры подгружаются отдельно: чтение блобов не должно тормозить экран
+  examplesFor(id).then(async ({ own, ref }) => {
+    const box = $('#exBox');
+    if (!box) return;
+    box.innerHTML = '';
+    box.append(el('h3', {}, `Примеры по пункту (${own.length + ref.length})`));
+    if (!own.length && !ref.length) {
+      box.append(el('div', { cls: 'sm mut' },
+        'Для этого пункта примеров ещё нет. Сфотографируйте несоответствие в находке и нажмите ★ на снимке.'));
+      return;
+    }
+    const tiles = [
+      ...await ownTiles(own, () => scrItem(id)),
+      ...ref.map(r => galleryTile({
+        src: r.file, verdict: r.verdict, kind: r.kind, title: r.title_ru,
+        note: r.caption_ru, item: r.item, source: r.source,
+      })),
+    ];
+    box.append(el('div', { cls: 'gal' }, ...tiles));
+  });
 }
 
 /* ══════════════ находки ══════════════ */
@@ -572,7 +605,11 @@ function editFinding(f, after) {
               f.photos = f.photos.filter(x => x !== pid);
               await DB.photoDel(pid); await save(ins); drawPhotos();
             }
-          }, '×'));
+          }, '×'),
+          el('button', {
+            cls: 'star', title: 'В библиотеку примеров',
+            onclick: () => addToLibrary(f, blob),
+          }, '★'));
         thumbs.append(wrap);
       }
     };
@@ -622,6 +659,147 @@ function shrink(file, max = 1400, q = 0.72) {
     img.onerror = () => res(file);
     img.src = URL.createObjectURL(file);
   });
+}
+
+/* ══════════════ библиотека примеров ══════════════ */
+
+// Свой снимок с инспекции → в библиотеку. Блоб копируем: удаление находки
+// не должно уносить с собой учебный пример.
+function addToLibrary(f, blob) {
+  const rec = {
+    id: uid(), item: f.item, cat: f.cat, verdict: 'bad', kind: 'photo',
+    title: (f.text || '').slice(0, 80), note: f.note || '',
+    source: 'Собственная инспекция', createdAt: new Date().toISOString(), photoId: '',
+  };
+  sheet('В библиотеку примеров', (box, close) => {
+    const vBox = el('div', { cls: 'row', style: 'gap:8px' });
+    const drawV = () => {
+      vBox.innerHTML = '';
+      [['bad', 'Как плохо (несоответствие)'], ['good', 'Как хорошо (норма)']].forEach(([k, t]) =>
+        vBox.append(el('button', {
+          cls: 'btn ' + (rec.verdict === k ? '' : 'sec'), style: 'flex:1;font-size:13px',
+          onclick: () => { rec.verdict = k; drawV(); }
+        }, t)));
+    };
+    drawV();
+    box.append(
+      el('div', { cls: 'card' },
+        el('img', { src: URL.createObjectURL(blob), style: 'width:100%;max-height:230px;object-fit:contain;border-radius:9px' })),
+      el('div', { cls: 'card' },
+        el('label', { cls: 'f' }, el('span', {}, 'Что показывает пример'),
+          el('input', { value: rec.title, oninput: e => rec.title = e.target.value })),
+        el('label', { cls: 'f' }, el('span', {}, 'Пояснение — на что смотреть'),
+          el('textarea', { oninput: e => rec.note = e.target.value }, rec.note)),
+        el('div', { cls: 'xs mut', style: 'margin-bottom:6px' }, 'Тип примера'), vBox,
+        el('div', { cls: 'xs mut sp' }, `Пункт ${rec.item} — ${ITEM_BY_ID[rec.item].ru}, категория ${rec.cat}`)),
+      el('button', {
+        cls: 'btn wide', onclick: async () => {
+          rec.photoId = uid();
+          await DB.photoPut(rec.photoId, blob);
+          await DB.libPut(rec);
+          close(); toast('Добавлено в библиотеку примеров');
+        }
+      }, 'Добавить'));
+  });
+}
+
+// Свои примеры и справочные изображения по одному пункту (или все)
+async function examplesFor(itemId) {
+  const own = (await DB.libAll()).filter(r => !itemId || r.item === itemId);
+  const ref = REF_PHOTOS.filter(r => !itemId || r.item === itemId);
+  return { own, ref, total: own.length + ref.length };
+}
+
+function galleryTile(o) {
+  // o: {src, verdict, kind, title, note, source}
+  const vc = o.kind === 'scheme' ? 'sch' : (o.verdict === 'good' ? 'good' : 'bad');
+  const vt = o.kind === 'scheme' ? 'схема' : (o.verdict === 'good' ? 'как хорошо' : 'как плохо');
+  return el('figure', { style: 'cursor:pointer', onclick: () => lightbox(o) },
+    el('img', { src: o.src, loading: 'lazy', alt: o.title || '' }),
+    el('figcaption', {},
+      el('span', { cls: 'v ' + vc }, vt),
+      el('div', { cls: 'b', style: 'font-size:12px' }, o.title || '—'),
+      o.item ? el('div', { cls: 'xs mut' }, o.item) : null));
+}
+
+function lightbox(o) {
+  const wrap = el('div', { cls: 'lightbox', onclick: () => wrap.remove() },
+    el('img', { src: o.src, alt: o.title || '' }),
+    el('div', { cls: 'cap' },
+      el('div', { cls: 'b' }, o.title || ''),
+      o.note ? el('div', { style: 'margin-top:5px' }, o.note) : null,
+      o.item ? el('div', { cls: 'xs', style: 'margin-top:5px;opacity:.7' },
+        o.item + ' — ' + (ITEM_BY_ID[o.item] ? ITEM_BY_ID[o.item].ru : '')) : null,
+      o.source ? el('div', { cls: 'xs', style: 'margin-top:4px;opacity:.55' }, 'Источник: ' + o.source) : null),
+    el('button', { cls: 'btn sec' }, 'Закрыть'));
+  document.body.append(wrap);
+}
+
+// Плитки из своих записей библиотеки — блобы читаются асинхронно
+async function ownTiles(records, onDeleted) {
+  const out = [];
+  for (const r of records) {
+    const blob = await DB.photoGet(r.photoId);
+    if (!blob) continue;
+    const tile = galleryTile({
+      src: URL.createObjectURL(blob), verdict: r.verdict, kind: r.kind,
+      title: r.title, note: r.note, item: r.item, source: r.source,
+    });
+    if (onDeleted) {
+      tile.append(el('button', {
+        cls: 'btn sec', style: 'width:100%;min-height:34px;font-size:12px;border-radius:0',
+        onclick: async e => {
+          e.stopPropagation();
+          if (!confirm('Убрать пример из библиотеки?')) return;
+          await DB.photoDel(r.photoId); await DB.libDel(r.id); onDeleted();
+        }
+      }, 'Убрать'));
+    }
+    out.push(tile);
+  }
+  return out;
+}
+
+let galState = { item: '', v: '' };
+
+async function scrGallery() {
+  setHeader('Примеры: как хорошо, как плохо', null);
+  const { own, ref } = await examplesFor(galState.item || '');
+  const pass = o => !galState.v || (galState.v === 'scheme' ? o.kind === 'scheme'
+    : (o.kind !== 'scheme' && o.verdict === galState.v));
+
+  const refTiles = ref.filter(pass).map(r => galleryTile({
+    src: r.file, verdict: r.verdict, kind: r.kind, title: r.title_ru,
+    note: r.caption_ru, item: r.item, source: r.source,
+  }));
+  const mine = await ownTiles(own.filter(pass), scrGallery);
+
+  const filters = el('div', { cls: 'row', style: 'gap:6px' },
+    ...[['', 'Все'], ['bad', 'Как плохо'], ['good', 'Как хорошо'], ['scheme', 'Схемы']].map(([k, t]) =>
+      el('button', {
+        cls: 'btn ' + (galState.v === k ? '' : 'sec'), style: 'flex:1;min-height:40px;font-size:13px',
+        onclick: () => { galState.v = k; scrGallery(); }
+      }, t)));
+
+  const sel = el('select', { onchange: e => { galState.item = e.target.value; scrGallery(); } },
+    el('option', { value: '' }, 'Все пункты'),
+    ...ITEMS.map(i => el('option', { value: i.id, selected: galState.item === i.id ? 'selected' : false },
+      `${i.id} — ${i.ru}`)));
+
+  render([
+    el('div', { cls: 'card' },
+      el('div', { cls: 'xs mut', style: 'margin-bottom:8px' },
+        'Свои примеры добавляются прямо с инспекции: в находке нажмите ★ на снимке. ' +
+        'Библиотека растёт от выезда к выезду и работает офлайн.'),
+      filters, el('div', { cls: 'sp' }, sel)),
+    mine.length ? el('div', { cls: 'sec-h' }, `Свои примеры (${mine.length})`) : null,
+    mine.length ? el('div', { cls: 'gal' }, ...mine) : null,
+    refTiles.length ? el('div', { cls: 'sec-h' }, `Из руководств (${refTiles.length})`) : null,
+    refTiles.length ? el('div', { cls: 'gal' }, ...refTiles) : null,
+    (!mine.length && !refTiles.length) ? el('div', { cls: 'empty' },
+      el('div', { cls: 'b' }, 'Примеров пока нет'),
+      el('div', { cls: 'sm sp' }, 'Сфотографируйте несоответствие на инспекции и нажмите ★ на снимке — он попадёт сюда.')) : null,
+  ]);
 }
 
 function scrFindings() {
@@ -872,9 +1050,27 @@ async function syncAll() {
 
 /* ══════════════ экран: справочник находок ══════════════ */
 
-let refState = { q: '', item: '', cat: '' };
+let refState = { q: '', item: '', cat: '', tab: 'pdf' };
 
+// Справочник — хаб из двух вкладок: формулировки находок и наглядные примеры
 function scrRef() {
+  if (refState.tab === 'gal') return scrGallery().then(() => {
+    const v = $('#view');
+    v.prepend(refHubStrip());
+  });
+  return scrRefFindings();
+}
+
+function refHubStrip() {
+  return el('div', { cls: 'row', style: 'gap:6px;margin-bottom:10px' },
+    ...[['pdf', 'Формулировки'], ['gal', 'Примеры']].map(([k, t]) =>
+      el('button', {
+        cls: 'btn ' + (refState.tab === k ? '' : 'sec'), style: 'flex:1;min-height:42px',
+        onclick: () => { refState.tab = k; scrRef(); }
+      }, t)));
+}
+
+function scrRefFindings() {
   setHeader('Справочник находок', null);
   const out = el('div');
 
@@ -913,6 +1109,7 @@ function scrRef() {
   draw();
 
   render([
+    refHubStrip(),
     el('div', { cls: 'card' },
       el('div', { cls: 'xs mut', style: 'margin-bottom:8px' },
         `База предописанных находок (PDF): ${PDF.length} формулировок по ${ITEMS.length} пунктам. ` +
