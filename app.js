@@ -3,7 +3,7 @@
    База находок: EASA RIM Appendix 1, Issue 6 (INST.RI.01/006). */
 'use strict';
 
-const APP_VER = '1.2.0';
+const APP_VER = '1.3.0';
 
 /* ══════════════ справочные константы ══════════════ */
 
@@ -23,13 +23,21 @@ const CATS = {
   G: { ru: 'General — отклонение по форме документа, вне категорий',       cls: 'catG' },
 };
 
-// Классы принятых мер — по бланку PI АГА РТ / RIM
+// Классы принятых мер — дословно по форме ввода базы SAFA (v2, Release-129,
+// вкладка Basic info → Actions). Порядок в базе обратный: от 3d к 1.
 const ACTIONS = [
-  ['1',  'Информирование командира воздушного судна'],
-  ['2',  'Информирование полномочного органа ГА и эксплуатанта'],
-  ['3a', 'Ограничение эксплуатации воздушного судна'],
-  ['3b', 'Корректирующие действия до вылета'],
-  ['3c', 'Воздушное судно запрещено к полёту (grounded) АГА РТ'],
+  ['1',  'Информирование командира воздушного судна',
+         'Information to Captain'],
+  ['2',  'Информирование полномочного органа и эксплуатанта',
+         'Information to the Authority and the Operator'],
+  ['3a', 'Ограничение эксплуатации воздушного судна',
+         'Restriction on the aircraft flight operation'],
+  ['3b', 'Корректирующие действия до вылета',
+         'Corrective actions before flight'],
+  ['3c', 'ВС запрещено к полёту инспектирующим полномочным органом',
+         'Aircraft grounded by inspecting NAA'],
+  ['3d', 'Немедленный запрет эксплуатации',
+         'Immediate Operating ban'],
 ];
 
 const ST = {                        // статус пункта чек-листа
@@ -842,12 +850,13 @@ function scrReport() {
   const clsBox = el('div');
   const drawCls = () => {
     clsBox.innerHTML = '';
-    ACTIONS.forEach(([k, t]) => clsBox.append(el('button', {
+    ACTIONS.forEach(([k, t, en]) => clsBox.append(el('button', {
       cls: 'opt' + (ins.actClass === k ? ' on' : ''),
       onclick: () => { ins.actClass = ins.actClass === k ? '' : k; save(ins); drawCls(); }
     }, el('div', { cls: 'row' }, el('span', { cls: 'pill pmut' }, k),
       el('span', { cls: 'sm grow' }, t),
-      k === sug ? el('span', { cls: 'pill pok xs' }, 'рекомендуется') : null))));
+      k === sug ? el('span', { cls: 'pill pok xs' }, 'рекомендуется') : null),
+      el('div', { cls: 'xs mut', style: 'margin-top:3px;margin-left:34px' }, en))));
   };
   drawCls();
 
@@ -935,8 +944,9 @@ function printPI(ins) {
         ${f.refs ? '<br><span style="font-size:8pt;color:#555">' + esc(f.refs) + '</span>' : ''}</td></tr>`).join('')
     : `<tr><td colspan="4" style="border:1px solid #999;padding:5px">Несоответствий не выявлено / No findings</td></tr>`;
 
-  const act = ACTIONS.map(([k, t]) =>
-    `<div>${ins.actClass === k ? '☒' : '☐'} <b>${k})</b> ${esc(t)}</div>`).join('');
+  const act = ACTIONS.map(([k, t, en]) =>
+    `<div>${ins.actClass === k ? '☒' : '☐'} <b>${k})</b> ${esc(t)}
+      <span style="color:#555"> / ${esc(en)}</span></div>`).join('');
 
   const sig = (d, cap) => `<td style="border:1px solid #999;padding:5px;width:50%;vertical-align:top">
       <div style="font-size:8pt;color:#555">${esc(cap)}</div>
