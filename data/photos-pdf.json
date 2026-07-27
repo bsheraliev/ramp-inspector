@@ -1,0 +1,123 @@
+[
+ {
+  "id": "pdf-001",
+  "file": "photos/pdf-001.jpg",
+  "item": "A01",
+  "verdict": null,
+  "title_ru": "Лётная кабина: общий вид",
+  "caption_ru": "Иллюстрация к разделу A «Лётная кабина» курса SAFA ИКАО. Смотрите общее состояние кабины, рабочих мест экипажа и наличие посторонних предметов.",
+  "source": "ICAO-SAFA-Ramp-Inspections-Part 1 RI ICAO NAU-страницы.pdf, с. 25",
+  "w": 974,
+  "h": 750
+ },
+ {
+  "id": "pdf-002",
+  "file": "photos/pdf-002.jpg",
+  "item": "A07",
+  "verdict": "bad",
+  "title_ru": "Предопределённые замечания по MEL (A07)",
+  "caption_ru": "Пример листа Pre-Defined Findings по пункту A07: формулировка замечания, категория и код PDF (SAFA-A07-02…05). Используйте готовую формулировку вместо своей.",
+  "source": "ICAO-SAFA-Ramp-Inspections-Part 1 RI ICAO NAU-страницы.pdf, с. 11",
+  "w": 1150,
+  "h": 669
+ },
+ {
+  "id": "pdf-003",
+  "file": "photos/pdf-003.jpg",
+  "item": "B01",
+  "verdict": null,
+  "title_ru": "Пассажирский салон: общий вид",
+  "caption_ru": "Иллюстрация к разделу B «Безопасность / салон». Оценивается общее внутреннее состояние салона, маркировка выходов и доступность аварийного оборудования.",
+  "source": "ICAO-SAFA-Ramp-Inspections-Part 1 RI ICAO NAU-страницы.pdf, с. 53",
+  "w": 520,
+  "h": 400
+ },
+ {
+  "id": "pdf-004",
+  "file": "photos/pdf-004.jpg",
+  "item": "C01",
+  "verdict": null,
+  "title_ru": "ВС на стоянке: начало внешнего осмотра",
+  "caption_ru": "Иллюстрация к разделу C «Состояние воздушного судна». Внешний осмотр начинают с общего вида ВС на стоянке и обстановки вокруг него.",
+  "source": "ICAO-SAFA-Ramp-Inspections-Part 2 RI ICAO NAU-страницы.pdf, с. 25",
+  "w": 1200,
+  "h": 923
+ },
+ {
+  "id": "pdf-005",
+  "file": "photos/pdf-005.jpg",
+  "item": "D03",
+  "verdict": null,
+  "title_ru": "Загрузка пакетированного груза на борт",
+  "caption_ru": "Иллюстрация к разделу D «Груз». Обратите внимание на увязку и крепление груза на паллете при погрузке.",
+  "source": "ICAO-SAFA-Ramp-Inspections-Part 2 RI ICAO NAU-страницы.pdf, с. 41",
+  "w": 503,
+  "h": 387
+ },
+ {
+  "id": "pdf-006",
+  "file": "photos/pdf-006.jpg",
+  "item": null,
+  "verdict": null,
+  "title_ru": "Бланк отчёта SAFA: лицевая сторона",
+  "caption_ru": "Образец лицевой стороны бланка отчёта SAFA / SANA Proof of Inspection из справочника инспектора.",
+  "source": "2026 Справочник SAFA инспектора.pdf, с. 12",
+  "w": 518,
+  "h": 761
+ },
+ {
+  "id": "pdf-007",
+  "file": "photos/pdf-007.jpg",
+  "item": null,
+  "verdict": null,
+  "title_ru": "Бланк отчёта: перечень пунктов A–E",
+  "caption_ru": "Оборотная сторона бланка отчёта: перечень всех пунктов проверки разделов A–E с колонками «Проверено» и «Замечания».",
+  "source": "2026 Справочник SAFA инспектора.pdf, с. 13",
+  "w": 945,
+  "h": 1200
+ },
+ {
+  "id": "pdf-008",
+  "file": "photos/pdf-008.jpg",
+  "item": null,
+  "verdict": null,
+  "title_ru": "Proof of Ramp Inspection (форма 136)",
+  "caption_ru": "Форма SAFA Proof of Inspection из курса ИКАО: реквизиты рейса и ВС, отметки по пунктам, блок подробных замечаний.",
+  "source": "ICAO-SAFA-Ramp-Inspections-Part 1 RI ICAO NAU-страницы.pdf, с. 7",
+  "w": 825,
+  "h": 1200
+ },
+ {
+  "id": "pdf-009",
+  "file": "photos/pdf-009.jpg",
+  "item": null,
+  "verdict": null,
+  "title_ru": "Бланк: раздел A «Лётная кабина»",
+  "caption_ru": "Страница бланка инспекции с пунктами раздела A и формой подробного описания замечаний (RIM Issue 4).",
+  "source": "the_ramp_inspection_manual_-_issue_4.pdf, с. 96",
+  "w": 1200,
+  "h": 852
+ },
+ {
+  "id": "pdf-010",
+  "file": "photos/pdf-010.jpg",
+  "item": null,
+  "verdict": null,
+  "title_ru": "Бланк: разделы B, C и D",
+  "caption_ru": "Страница бланка инспекции с пунктами разделов «Безопасность / салон», «Состояние ВС» и «Груз» (RIM Issue 4).",
+  "source": "the_ramp_inspection_manual_-_issue_4.pdf, с. 97",
+  "w": 1200,
+  "h": 857
+ },
+ {
+  "id": "pdf-011",
+  "file": "photos/pdf-011.jpg",
+  "item": null,
+  "verdict": null,
+  "title_ru": "Блок «Принятые меры» в отчёте",
+  "caption_ru": "Часть бланка с перечнем действий по итогам инспекции — от информирования КВС до запрета эксплуатации и задержания ВС инспектирующим полномочным органом.",
+  "source": "ICAO-SAFA-Ramp-Inspections-Part 1 RI ICAO NAU-страницы.pdf, с. 6",
+  "w": 785,
+  "h": 535
+ }
+]

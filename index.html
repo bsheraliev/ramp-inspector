@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b3d63">
+<title>SAFA Inspector — АГА РТ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{
+  --bg:#0e1620; --bg2:#152232; --card:#1b2a3d; --line:#2b3f58;
+  --fg:#e8eef6; --mut:#9db0c7; --acc:#3d9ae0; --acc2:#0b3d63;
+  --ok:#2ea36b; --c1:#d9a441; --c2:#e07b39; --c3:#d94f4f; --g:#7e8fa6;
+  --r:12px; --tap:48px;
+}
+@media (prefers-color-scheme:light){
+  :root{--bg:#f2f5f9;--bg2:#fff;--card:#fff;--line:#d7dfea;--fg:#12212f;--mut:#5d7086;--acc:#1f6fb2;--acc2:#0b3d63}
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+h1,h2,h3{margin:0 0 8px;line-height:1.25}
+a{color:var(--acc)}
+button,input,select,textarea{font:inherit;color:inherit}
+
+/* ---------- каркас ---------- */
+header{position:sticky;top:0;z-index:20;background:var(--acc2);color:#fff;
+  padding:calc(10px + env(safe-area-inset-top)) 12px 10px;display:flex;align-items:center;gap:10px;
+  box-shadow:0 2px 10px rgba(0,0,0,.35)}
+header .ttl{font-weight:600;font-size:17px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header button{background:rgba(255,255,255,.14);border:0;color:#fff;border-radius:10px;
+  min-width:40px;height:40px;padding:0 10px;font-size:15px}
+main{padding:12px;max-width:900px;margin:0 auto}
+
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;background:var(--bg2);
+  border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs button{flex:1;background:0;border:0;color:var(--mut);padding:8px 2px 10px;font-size:11px;
+  display:flex;flex-direction:column;align-items:center;gap:3px;min-height:56px}
+nav.tabs button b{font-size:19px;font-weight:400;line-height:1}
+nav.tabs button.on{color:var(--acc)}
+
+/* ---------- элементы ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:10px}
+.row{display:flex;gap:8px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.mut{color:var(--mut)}
+.sm{font-size:13px}
+.xs{font-size:12px}
+.b{font-weight:600}
+.right{margin-left:auto}
+.sp{margin-top:14px}
+
+.btn{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:0 16px;min-height:var(--tap);
+  font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn.sec{background:var(--card);color:var(--fg);border:1px solid var(--line)}
+.btn.dan{background:var(--c3)}
+.btn.wide{width:100%}
+.btn:disabled{opacity:.45}
+
+label.f{display:block;margin-bottom:9px}
+label.f span{display:block;font-size:12px;color:var(--mut);margin-bottom:3px}
+input,select,textarea{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:9px;
+  padding:11px 10px;min-height:var(--tap)}
+textarea{min-height:80px;resize:vertical}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+@media(max-width:400px){.grid2{grid-template-columns:1fr}}
+
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 9px;font-size:12px;
+  font-weight:600;border:1px solid transparent;white-space:nowrap}
+.cat1{background:rgba(217,164,65,.18);color:var(--c1);border-color:var(--c1)}
+.cat2{background:rgba(224,123,57,.18);color:var(--c2);border-color:var(--c2)}
+.cat3{background:rgba(217,79,79,.18);color:var(--c3);border-color:var(--c3)}
+.catG{background:rgba(126,143,166,.18);color:var(--g);border-color:var(--g)}
+.pok{background:rgba(46,163,107,.18);color:var(--ok);border-color:var(--ok)}
+.pmut{background:rgba(157,176,199,.14);color:var(--mut);border-color:var(--line)}
+
+/* чек-лист */
+.sec-h{display:flex;align-items:center;gap:8px;margin:16px 0 8px;font-weight:700;font-size:15px}
+.sec-h .code{background:var(--acc2);color:#fff;border-radius:8px;padding:2px 9px;font-size:14px}
+.item{display:flex;align-items:stretch;gap:0;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);margin-bottom:7px;overflow:hidden}
+.item .lab{flex:1;min-width:0;padding:9px 10px;text-align:left;background:0;border:0;color:inherit}
+.item .lab .id{font-size:12px;color:var(--mut);font-weight:600}
+.item .lab .nm{font-size:14px}
+.item .sw{display:flex;border-left:1px solid var(--line)}
+.item .sw button{width:44px;background:0;border:0;border-left:1px solid var(--line);color:var(--mut);font-size:16px}
+.item .sw button:first-child{border-left:0}
+.item .sw button.on{background:var(--acc);color:#fff}
+.item .sw button.on.bad{background:var(--c3)}
+.item.hasf{border-color:var(--c3)}
+
+/* находки */
+.fnd{border-left:4px solid var(--c3);padding-left:9px;margin-bottom:9px}
+.fnd.k1{border-color:var(--c1)} .fnd.k2{border-color:var(--c2)} .fnd.kG{border-color:var(--g)}
+.opt{display:block;width:100%;text-align:left;background:var(--bg2);border:1px solid var(--line);
+  border-radius:10px;padding:10px;margin-bottom:7px}
+.opt.on{border-color:var(--acc);background:rgba(61,154,224,.13)}
+.opt.good{border-color:var(--ok);background:rgba(46,163,107,.16)}
+.opt.bad{border-color:var(--c3);background:rgba(217,79,79,.16)}
+
+.sheet{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.55);display:flex;align-items:flex-end}
+.sheet>div{background:var(--bg);width:100%;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;
+  padding:14px 12px calc(14px + env(safe-area-inset-bottom));max-width:900px;margin:0 auto}
+.sheet h3{position:sticky;top:-14px;background:var(--bg);padding:4px 0 8px;margin:0 0 6px;z-index:1}
+
+.thumbs{display:flex;gap:7px;flex-wrap:wrap;margin-top:7px}
+.thumbs img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+.thumbs .del{position:relative;display:inline-block}
+.thumbs .del button{position:absolute;top:-6px;right:-6px;width:24px;height:24px;min-height:0;padding:0;
+  border-radius:50%;background:var(--c3);color:#fff;border:0;font-size:14px;line-height:1}
+
+.sig{background:#fff;border:1px solid var(--line);border-radius:9px;width:100%;height:130px;touch-action:none}
+.bar{height:7px;border-radius:4px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:78px;z-index:60;background:#111c28;
+  color:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 15px;font-size:14px;
+  box-shadow:0 6px 20px rgba(0,0,0,.4);max-width:88vw}
+.empty{text-align:center;color:var(--mut);padding:34px 12px}
+
+@media print{
+  header,nav.tabs,.noprint{display:none!important}
+  body{background:#fff;color:#000;padding:0;font-size:11px}
+  main{max-width:none;padding:0}
+  .card{border:1px solid #999;background:#fff;color:#000;break-inside:avoid}
+  .pill{border:1px solid #000;color:#000!important;background:#fff!important}
+}
+</style>
+</head>
+<body>
+<header>
+  <button id="back" hidden>‹</button>
+  <div class="ttl" id="title">SAFA Inspector</div>
+  <button id="hdrAct" hidden></button>
+</header>
+
+<main id="view"></main>
+
+<nav class="tabs" id="tabs">
+  <button data-t="list"><b>📋</b>Инспекции</button>
+  <button data-t="ref"><b>📖</b>Справочник</button>
+  <button data-t="train"><b>🎓</b>Тренажёр</button>
+  <button data-t="stats"><b>📊</b>Сводка</button>
+  <button data-t="set"><b>⚙️</b>Настройки</button>
+</nav>
+
+<script src="data/checklist.js"></script>
+<script src="data/findings.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

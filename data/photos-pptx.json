@@ -1,0 +1,24 @@
+[
+ {
+  "id": "pptx-001",
+  "file": "photos/pptx-001.jpg",
+  "item": null,
+  "verdict": null,
+  "title_ru": "Бланк Proof of Inspection: 53 пункта A–E",
+  "caption_ru": "Структура отчёта перронной проверки: разделы A (лётная кабина, 24 пункта), B (безопасность/салон, 14), C (состояние ВС, 11), D (груз, 3), E (общее, 1), колонки Check/Remark и блок принятых мер Action taken.",
+  "source": "SAFA-RI-Day-2-NAU.pptx, слайд 30",
+  "w": 942,
+  "h": 1200
+ },
+ {
+  "id": "pptx-002",
+  "file": "photos/pptx-002.jpg",
+  "item": null,
+  "verdict": null,
+  "title_ru": "Форма 136 — отчёт SAFA/SACA для заполнения",
+  "caption_ru": "Рабочий бланк EU RI Checklist (Form 136), который вручается экипажу: шапка с данными рейса и ВС, 53 пункта проверки, раздел Action Taken от «no remarks» до запрета эксплуатации и поле комментариев экипажа.",
+  "source": "SAFA-RI-Day-2-NAU.pptx, слайд 31",
+  "w": 787,
+  "h": 1200
+ }
+]
