@@ -227,7 +227,7 @@ document.addEventListener('click', e => {
 /* ══════════════ экран: список инспекций ══════════════ */
 
 async function scrList() {
-  setHeader('Инспекции на пероне', null, ['+', pickType]);
+  setHeader('Инспекции на перроне', null, ['+', pickType]);
   const all = (await DB.all()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   if (!all.length) {
     return render(el('div', { cls: 'empty' },
