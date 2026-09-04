@@ -3,7 +3,7 @@
    База находок: EASA RIM Appendix 1, Issue 6 (INST.RI.01/006). */
 'use strict';
 
-const APP_VER = '1.3.0';
+const APP_VER = '1.4.0';
 
 /* ══════════════ справочные константы ══════════════ */
 
@@ -245,13 +245,16 @@ async function scrList() {
       cls: 'card', onclick: () => openInspection(ins.id),
       style: 'cursor:pointer',
     },
-      el('div', { cls: 'row' },
+      el('div', { cls: 'row wrap' },
         el('span', { cls: 'pill pmut' }, ins.type),
+        ins.demo ? el('span', { cls: 'pill demo' }, 'ДЕМО') : null,
         badge,
         el('span', { cls: 'pill ' + syncPill[0] }, syncPill[1]),
         el('span', { cls: 'right xs mut' }, fmtDate(ins.gen.date) + ' ' + ins.gen.time)),
       el('div', { cls: 'b sp', style: 'margin-top:8px' }, inspTitle(ins)),
       el('div', { cls: 'sm mut' }, [ins.gen.acType, ins.gen.airport].filter(Boolean).join(' · ') || '—'),
+      ins.demo ? el('div', { cls: 'xs mut', style: 'margin-top:4px' },
+        'Учебный пример. Эксплуатант вымышлен. Можно удалить — не вернётся.') : null,
       el('div', { cls: 'row sm', style: 'margin-top:8px' },
         el('span', { cls: 'grow' },
           el('div', { cls: 'bar' }, el('i', { style: `width:${done / ITEMS.length * 100}%` }))),
@@ -328,8 +331,9 @@ function inspMenu(ins) {
       await save(ins); close(); scrInsp();
     });
     act('Выгрузить в файл (JSON)', () => { exportJSON(ins); close(); });
-    act('Удалить инспекцию', async () => {
-      if (!confirm('Удалить инспекцию безвозвратно?')) return;
+    act(ins.demo ? 'Удалить учебный пример' : 'Удалить инспекцию', async () => {
+      if (!confirm(ins.demo ? 'Удалить учебный пример? Он больше не появится.'
+                            : 'Удалить инспекцию безвозвратно?')) return;
       for (const f of ins.findings) for (const p of (f.photos || [])) await DB.photoDel(p);
       await DB.del(ins.id); close(); scrList();
     }, 'dan');
@@ -1387,10 +1391,91 @@ async function exportAll() {
   document.body.append(a); a.click(); a.remove();
 }
 
+/* ══════════════ демо-инспекция для показа ══════════════
+   Заполненный пример, чтобы приложение не открывалось пустым экраном.
+   Правило: демо НИКОГДА не вмешивается в работу инспектора.
+   Засевается только на чистом устройстве (ни одной своей инспекции) и только
+   один раз; удалил — больше не появится. Принудительно вернуть: ?demo=1 */
+
+const DEMO_ID = 'demo-example-safa';
+
+function demoInspection() {
+  const items = {};
+  ITEMS.forEach(i => items[i.id] = { s: 'ni', rmk: '' });
+  // правдоподобный частичный обход: документы и кабина пройдены, дошли до шасси
+  ['A01', 'A04', 'A05', 'A07', 'A08', 'A10', 'A11', 'A12', 'A20', 'A21', 'A22',
+   'B04', 'B05', 'B12'].forEach(id => items[id].s = 'ok');
+  items['A09'] = { s: 'na', rmk: 'Сертификат по шуму не применим для данного типа' };
+  items['C04'] = { s: 'f',  rmk: 'Левая основная опора, колесо № 2' };
+  items['A23'] = { s: 'f',  rmk: '' };
+
+  const tyre = SAFA_PDF.find(f => f.code === 'C04-09');
+  const tech = SAFA_PDF.find(f => f.item === 'A23' && f.cat === 1);
+
+  return {
+    id: DEMO_ID, type: 'SAFA', ver: APP_VER, status: 'draft', demo: true,
+    createdAt: '2026-08-15T10:20:00.000Z', updatedAt: '2026-08-15T11:05:00.000Z',
+    gen: {
+      poi: 'ДЕМО-2026-001', date: '2026-08-15', time: '10:20', airport: 'UTDD',
+      operator: 'DEMO AIRLINES — учебный пример', aocNo: 'DEMO-001', aocState: 'XX',
+      aocContact: '', chartered: '',
+      routeFrom: 'UTDD', flightIn: 'DM-101', routeTo: 'UTTT', flightOut: 'DM-102',
+      regState: 'XX', kind: 'pax', acType: 'B738', acReg: 'EX-DEMO', msn: '30000',
+      crewLic1: 'XX', crewLic2: 'XX',
+      inspector: 'Инспектор АГА РТ (пример)', captain: 'КВС (пример)',
+    },
+    items,
+    findings: [
+      { id: 'demo-f1', item: 'C04', code: 'C04-09',
+        text: tyre ? tyre.text : 'Tyre(s) unserviceable (worn or damaged) and not recorded',
+        cat: 3, refs: tyre ? tyre.refs : '',
+        note: 'Левая основная опора, колесо № 2: износ протектора до силового слоя. '
+            + 'Запись в бортовом журнале и в перечне отложенных дефектов отсутствует.',
+        photos: ['demo-photo-1'] },
+      { id: 'demo-f2', item: 'A23', code: tech ? tech.code : 'A23-01',
+        text: tech ? tech.text : 'Known defect not reported/assessed',
+        cat: tech ? tech.cat : 1, refs: tech ? tech.refs : '',
+        note: 'Дефект колеса не внесён в бортовой журнал — связано с находкой по C04.',
+        photos: [] },
+    ],
+    actClass: '3b',
+    comments: 'Учебный пример для демонстрации возможностей приложения. '
+            + 'Эксплуатант и регистрационный номер вымышлены.',
+    sig: { insp: '', cap: '' },
+    sync: { state: 'local', at: '' },
+  };
+}
+
+// Кладём в хранилище фото копию справочного изображения EASA по этой же находке
+async function demoPhoto() {
+  if (await DB.photoGet('demo-photo-1')) return;
+  const ref = REF_PHOTOS.find(p => p.id === 'pdf-104')
+           || REF_PHOTOS.find(p => p.item === 'C04' && p.verdict === 'bad');
+  if (!ref) return;
+  try {
+    const blob = await fetch(ref.file).then(r => r.ok ? r.blob() : null);
+    if (blob) await DB.photoPut('demo-photo-1', blob);
+  } catch (e) { /* офлайн на первом запуске — пример останется без фото */ }
+}
+
+async function seedDemo(force) {
+  if (!force) {
+    if (await DB.kvGet('demoSeeded')) return false;      // уже был, даже если удалён
+    if ((await DB.all()).length) return false;           // на устройстве есть своя работа
+  }
+  await demoPhoto();
+  await DB.put(demoInspection());
+  await DB.kvPut('demoSeeded', 1);
+  return true;
+}
+
 /* ══════════════ старт ══════════════ */
 
-(function boot() {
+(async function boot() {
   document.querySelector('nav.tabs button').classList.add('on');
+  // ?demo=1 — принудительно вернуть учебный пример (для показа)
+  const force = /[?&]demo=1/.test(location.search);
+  try { await seedDemo(force); } catch (e) {}
   scrList();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
