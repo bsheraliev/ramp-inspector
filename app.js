@@ -3,7 +3,14 @@
    База находок: EASA RIM Appendix 1, Issue 6 (INST.RI.01/006). */
 'use strict';
 
-const APP_VER = '1.4.0';
+/* ══════════════ локализация ru/en ══════════════ */
+const I18N = window.SAFA_I18N || {};
+// перевод UI-строки: при en берём из словаря, иначе — исходная русская
+function t(s) { return CFG.d.lang === 'en' && I18N[s] ? I18N[s] : s; }
+// перевод поля структуры данных {ru,en}: при en берём en, если он есть
+const L = o => (o && CFG.d.lang === 'en' && o.en) ? o.en : (o ? o.ru : '');
+
+const APP_VER = '1.5.0';
 
 /* ══════════════ справочные константы ══════════════ */
 
@@ -17,10 +24,10 @@ const TYPES = {
 };
 
 const CATS = {
-  1: { ru: 'Категория 1 — незначительное влияние на безопасность полётов', cls: 'cat1' },
-  2: { ru: 'Категория 2 — существенное влияние на безопасность полётов',   cls: 'cat2' },
-  3: { ru: 'Категория 3 — серьёзное влияние на безопасность полётов',      cls: 'cat3' },
-  G: { ru: 'General — отклонение по форме документа, вне категорий',       cls: 'catG' },
+  1: { ru: 'Категория 1 — незначительное влияние на безопасность полётов', en: 'Category 1 — minor influence on flight safety',       cls: 'cat1' },
+  2: { ru: 'Категория 2 — существенное влияние на безопасность полётов',   en: 'Category 2 — significant influence on flight safety', cls: 'cat2' },
+  3: { ru: 'Категория 3 — серьёзное влияние на безопасность полётов',      en: 'Category 3 — major influence on flight safety',       cls: 'cat3' },
+  G: { ru: 'General — отклонение по форме документа, вне категорий',       en: 'General — documentary deviation, outside categories', cls: 'catG' },
 };
 
 // Классы принятых мер — дословно по форме ввода базы SAFA (v2, Release-129,
@@ -40,7 +47,7 @@ const ACTIONS = [
          'Immediate Operating ban'],
 ];
 
-const ST = {                        // статус пункта чек-листа
+const ST = {                        // статус пункта чек-листа (ru — ключ словаря, перевод через t() при показе)
   ni: { ru: 'не проверялся', ic: '–',  cls: 'pmut' },
   ok: { ru: 'соответствует', ic: '✓',  cls: 'pok'  },
   na: { ru: 'не применимо',  ic: 'N',  cls: 'pmut' },
@@ -147,7 +154,7 @@ function sheet(title, build) {
   const born = Date.now();
   const wrap = el('div', { cls: 'sheet', onclick: e => { if (e.target === wrap && Date.now() - born > 350) close(); } },
     el('div', {}, el('h3', {}, title), box,
-      el('button', { cls: 'btn sec wide sp', onclick: () => close() }, 'Закрыть')));
+      el('button', { cls: 'btn sec wide sp', onclick: () => close() }, t('Закрыть'))));
   function close() { wrap.remove(); }
   build(box, close);
   document.body.append(wrap);
@@ -186,7 +193,7 @@ const progress = ins => ITEMS.filter(i => ins.items[i.id].s !== 'ni').length;
 
 function inspTitle(ins) {
   const g = ins.gen;
-  return [g.acReg || 'б/н рег.', g.operator, g.flightIn || g.flightOut].filter(Boolean).join(' · ');
+  return [g.acReg || t('б/н рег.'), g.operator, g.flightIn || g.flightOut].filter(Boolean).join(' · ');
 }
 
 async function save(ins) {
@@ -216,53 +223,72 @@ function render(nodes) {
   window.scrollTo(0, 0);
 }
 
+const ROUTER = { list: scrList, ref: scrRef, train: scrTrain, stats: scrStats, set: scrSet };
+// подписи вкладок: иконка + переводимая метка
+const NAV = { list: ['📋', 'Инспекции'], ref: ['📖', 'Справочник'], train: ['🎓', 'Тренажёр'],
+              stats: ['📊', 'Сводка'], set: ['⚙️', 'Настройки'] };
+function applyNav() {
+  document.querySelectorAll('nav.tabs button').forEach(b => {
+    const nv = NAV[b.dataset.t]; if (!nv) return;
+    b.innerHTML = '';
+    b.append(el('b', {}, nv[0]), document.createTextNode(t(nv[1])));
+  });
+}
+// смена языка: сохранить, обновить навигацию и перерисовать активную вкладку
+function setLang(l) {
+  CFG.d.lang = l; CFG.save();
+  document.documentElement.lang = l;
+  applyNav();
+  (ROUTER[S.tab] || scrList)();
+}
+
 document.addEventListener('click', e => {
-  const t = e.target.closest('nav.tabs button');
-  if (!t) return;
-  S.tab = t.dataset.t;
-  [...document.querySelectorAll('nav.tabs button')].forEach(b => b.classList.toggle('on', b === t));
-  ({ list: scrList, ref: scrRef, train: scrTrain, stats: scrStats, set: scrSet }[S.tab])();
+  const b = e.target.closest('nav.tabs button');
+  if (!b) return;
+  S.tab = b.dataset.t;
+  [...document.querySelectorAll('nav.tabs button')].forEach(x => x.classList.toggle('on', x === b));
+  (ROUTER[S.tab] || scrList)();
 });
 
 /* ══════════════ экран: список инспекций ══════════════ */
 
 async function scrList() {
-  setHeader('Инспекции на перроне', null, ['+', pickType]);
+  setHeader(t('Инспекции на перроне'), null, ['+', pickType]);
   const all = (await DB.all()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   if (!all.length) {
     return render(el('div', { cls: 'empty' },
-      el('div', { cls: 'b', style: 'font-size:19px;margin-bottom:6px' }, 'Инспекций пока нет'),
-      el('div', { cls: 'sm' }, 'Нажмите «+» вверху, чтобы начать проверку воздушного судна.'),
-      el('button', { cls: 'btn sp', onclick: pickType }, 'Новая инспекция')));
+      el('div', { cls: 'b', style: 'font-size:19px;margin-bottom:6px' }, t('Инспекций пока нет')),
+      el('div', { cls: 'sm' }, t('Нажмите «+» вверху, чтобы начать проверку воздушного судна.')),
+      el('button', { cls: 'btn sp', onclick: pickType }, t('Новая инспекция'))));
   }
   const nodes = all.map(ins => {
     const done = progress(ins), mc = maxCat(ins);
     const badge = ins.status === 'completed'
-      ? el('span', { cls: 'pill pok' }, 'завершена')
-      : el('span', { cls: 'pill pmut' }, 'в работе');
-    const syncPill = { local: ['pmut', 'не отправлена'], queued: ['cat1', 'в очереди'], sent: ['pok', 'отправлена'] }[ins.sync.state];
+      ? el('span', { cls: 'pill pok' }, t('завершена'))
+      : el('span', { cls: 'pill pmut' }, t('в работе'));
+    const syncPill = { local: ['pmut', t('не отправлена')], queued: ['cat1', t('в очереди')], sent: ['pok', t('отправлена')] }[ins.sync.state];
     return el('div', {
       cls: 'card', onclick: () => openInspection(ins.id),
       style: 'cursor:pointer',
     },
       el('div', { cls: 'row wrap' },
         el('span', { cls: 'pill pmut' }, ins.type),
-        ins.demo ? el('span', { cls: 'pill demo' }, 'ДЕМО') : null,
+        ins.demo ? el('span', { cls: 'pill demo' }, t('ДЕМО')) : null,
         badge,
         el('span', { cls: 'pill ' + syncPill[0] }, syncPill[1]),
         el('span', { cls: 'right xs mut' }, fmtDate(ins.gen.date) + ' ' + ins.gen.time)),
       el('div', { cls: 'b sp', style: 'margin-top:8px' }, inspTitle(ins)),
       el('div', { cls: 'sm mut' }, [ins.gen.acType, ins.gen.airport].filter(Boolean).join(' · ') || '—'),
       ins.demo ? el('div', { cls: 'xs mut', style: 'margin-top:4px' },
-        'Учебный пример. Эксплуатант вымышлен. Можно удалить — не вернётся.') : null,
+        t('Учебный пример. Эксплуатант вымышлен. Можно удалить — не вернётся.')) : null,
       el('div', { cls: 'row sm', style: 'margin-top:8px' },
         el('span', { cls: 'grow' },
           el('div', { cls: 'bar' }, el('i', { style: `width:${done / ITEMS.length * 100}%` }))),
         el('span', { cls: 'xs mut' }, `${done}/${ITEMS.length}`),
         ins.findings.length
           ? el('span', { cls: 'pill ' + (mc ? CATS[mc].cls : 'catG') },
-              `находок: ${ins.findings.length}${mc ? ' · макс. кат. ' + mc : ''}`)
-          : el('span', { cls: 'pill pok' }, 'без находок')));
+              t('находок: ') + ins.findings.length + (mc ? t(' · макс. кат. ') + mc : ''))
+          : el('span', { cls: 'pill pok' }, t('без находок'))));
   });
   render(nodes);
 }
@@ -277,7 +303,7 @@ function pickType() {
           close();
           openInspection(ins.id);
         }
-      }, el('div', { cls: 'b' }, v.ru), el('div', { cls: 'xs mut' }, v.en)));
+      }, el('div', { cls: 'b' }, L(v)), el('div', { cls: 'xs mut' }, CFG.d.lang === 'en' ? v.ru : v.en)));
     });
   });
 }
@@ -291,7 +317,7 @@ async function openInspection(id) {
 
 function scrInsp() {
   const ins = S.ins;
-  setHeader(inspTitle(ins) || 'Новая инспекция', scrList, ['⋯', () => inspMenu(ins)]);
+  setHeader(inspTitle(ins) || t('Новая инспекция'), scrList, ['⋯', () => inspMenu(ins)]);
   const done = progress(ins), mc = maxCat(ins);
   const nav = (icon, name, hint, fn, badge) => el('div', {
     cls: 'card row', style: 'cursor:pointer;gap:11px', onclick: fn
@@ -305,35 +331,35 @@ function scrInsp() {
       el('div', { cls: 'row' },
         el('span', { cls: 'pill pmut' }, ins.type),
         el('span', { cls: 'right xs mut' }, TYPES[ins.type].en)),
-      el('div', { cls: 'sm sp', style: 'margin-top:8px' }, TYPES[ins.type].ru)),
+      el('div', { cls: 'sm sp', style: 'margin-top:8px' }, L(TYPES[ins.type]))),
 
-    nav('📝', 'Общие сведения', 'Рейс, эксплуатант, ВС, экипаж', () => scrGeneral(),
-      ins.gen.acReg && ins.gen.operator ? el('span', { cls: 'pill pok' }, 'заполнено')
-                                        : el('span', { cls: 'pill cat1' }, 'не заполнено')),
+    nav('📝', t('Общие сведения'), t('Рейс, эксплуатант, ВС, экипаж'), () => scrGeneral(),
+      ins.gen.acReg && ins.gen.operator ? el('span', { cls: 'pill pok' }, t('заполнено'))
+                                        : el('span', { cls: 'pill cat1' }, t('не заполнено'))),
 
-    nav('✅', 'Чек-лист (53 пункта)', `Проверено ${done} из ${ITEMS.length}`, () => scrChecklist(),
+    nav('✅', t('Чек-лист (53 пункта)'), t('Проверено') + ' ' + done + ' ' + t('из') + ' ' + ITEMS.length, () => scrChecklist(),
       el('span', { cls: 'pill ' + (done === ITEMS.length ? 'pok' : 'pmut') }, `${done}/${ITEMS.length}`)),
 
-    nav('⚠️', 'Находки', ins.findings.length ? `Максимальная категория: ${mc || 'G'}` : 'Несоответствий не выявлено',
+    nav('⚠️', t('Находки'), ins.findings.length ? t('Максимальная категория: ') + (mc || 'G') : t('Несоответствий не выявлено'),
       () => scrFindings(),
       el('span', { cls: 'pill ' + (ins.findings.length ? (mc ? CATS[mc].cls : 'catG') : 'pok') },
         String(ins.findings.length))),
 
-    nav('📄', 'Отчёт (Proof of Inspection)', 'Меры, подписи, печать и отправка', () => scrReport()),
+    nav('📄', t('Отчёт (Proof of Inspection)'), t('Меры, подписи, печать и отправка'), () => scrReport()),
   ]);
 }
 
 function inspMenu(ins) {
   sheet('Инспекция', (box, close) => {
     const act = (t, fn, cls) => box.append(el('button', { cls: 'btn ' + (cls || 'sec') + ' wide', style: 'margin-bottom:8px', onclick: fn }, t));
-    act(ins.status === 'completed' ? 'Вернуть в работу' : 'Отметить завершённой', async () => {
+    act(ins.status === 'completed' ? t('Вернуть в работу') : t('Отметить завершённой'), async () => {
       ins.status = ins.status === 'completed' ? 'draft' : 'completed';
       await save(ins); close(); scrInsp();
     });
     act('Выгрузить в файл (JSON)', () => { exportJSON(ins); close(); });
-    act(ins.demo ? 'Удалить учебный пример' : 'Удалить инспекцию', async () => {
-      if (!confirm(ins.demo ? 'Удалить учебный пример? Он больше не появится.'
-                            : 'Удалить инспекцию безвозвратно?')) return;
+    act(ins.demo ? t('Удалить учебный пример') : t('Удалить инспекцию'), async () => {
+      if (!confirm(ins.demo ? t('Удалить учебный пример? Он больше не появится.')
+                            : t('Удалить инспекцию безвозвратно?'))) return;
       for (const f of ins.findings) for (const p of (f.photos || [])) await DB.photoDel(p);
       await DB.del(ins.id); close(); scrList();
     }, 'dan');
@@ -344,7 +370,7 @@ function inspMenu(ins) {
 
 function scrGeneral() {
   const ins = S.ins, g = ins.gen;
-  setHeader('Общие сведения', scrInsp);
+  setHeader(t('Общие сведения'), scrInsp);
   const f = (key, lab, opts = {}) => el('label', { cls: 'f' },
     el('span', {}, lab),
     el(opts.tag || 'input', {
@@ -354,7 +380,7 @@ function scrGeneral() {
     }, opts.tag === 'textarea' ? g[key] : null));
 
   const kind = el('div', { cls: 'row', style: 'gap:8px' },
-    ...[['pax', 'Пассажирский'], ['cargo', 'Грузовой'], ['mixed', 'Смешанный']].map(([k, t]) =>
+    ...[['pax', t('Пассажирский')], ['cargo', t('Грузовой')], ['mixed', t('Смешанный')]].map(([k, t]) =>
       el('button', {
         cls: 'btn ' + (g.kind === k ? '' : 'sec'), style: 'flex:1;font-size:14px;padding:0 6px',
         onclick: e => { g.kind = k; save(ins); scrGeneral(); }
@@ -362,46 +388,46 @@ function scrGeneral() {
 
   render([
     el('div', { cls: 'card' },
-      el('h3', {}, 'Инспекция'),
+      el('h3', {}, t('Инспекция')),
       el('div', { cls: 'grid2' },
-        f('poi', 'POI No (номер акта)'),
-        f('airport', 'Аэропорт (ICAO/IATA)'),
+        f('poi', t('POI No (номер акта)')),
+        f('airport', t('Аэропорт (ICAO/IATA)')),
         f('date', 'Дата', { type: 'date' }),
-        f('time', 'Время (UTC/местное)', { type: 'time' })),
+        f('time', t('Время (UTC/местное)'), { type: 'time' })),
       f('inspector', 'Инспектор АГА РТ')),
 
     el('div', { cls: 'card' },
       el('h3', {}, 'Эксплуатант'),
-      f('operator', 'Наименование эксплуатанта'),
+      f('operator', t('Наименование эксплуатанта')),
       el('div', { cls: 'grid2' },
-        f('aocNo', 'Номер AOC'),
-        f('aocState', 'Государство выдачи AOC')),
-      f('aocContact', 'Контактные данные владельца AOC', { tag: 'textarea' }),
-      f('chartered', 'Зафрахтовано (эксплуатант/государство)')),
+        f('aocNo', t('Номер AOC')),
+        f('aocState', t('Государство выдачи AOC'))),
+      f('aocContact', t('Контактные данные владельца AOC'), { tag: 'textarea' }),
+      f('chartered', t('Зафрахтовано (эксплуатант/государство)'))),
 
     el('div', { cls: 'card' },
-      el('h3', {}, 'Рейс'),
+      el('h3', {}, t('Рейс')),
       el('div', { cls: 'grid2' },
-        f('routeFrom', 'Прибыл из'), f('flightIn', 'Номер рейса (прилёт)'),
-        f('routeTo', 'Убывает в'), f('flightOut', 'Номер рейса (вылет)')),
-      el('label', { cls: 'f' }, el('span', {}, 'Вид перевозки'), kind)),
+        f('routeFrom', t('Прибыл из')), f('flightIn', t('Номер рейса (прилёт)')),
+        f('routeTo', t('Убывает в')), f('flightOut', t('Номер рейса (вылет)'))),
+      el('label', { cls: 'f' }, el('span', {}, t('Вид перевозки')), kind)),
 
     el('div', { cls: 'card' },
-      el('h3', {}, 'Воздушное судно'),
-      f('acType', 'Тип / модель ВС'),
+      el('h3', {}, t('Воздушное судно')),
+      f('acType', t('Тип / модель ВС')),
       el('div', { cls: 'grid2' },
-        f('acReg', 'Регистрационный номер'),
-        f('msn', 'Заводской номер (MSN)'),
-        f('regState', 'Государство регистрации'), null)),
+        f('acReg', t('Регистрационный номер')),
+        f('msn', t('Заводской номер (MSN)')),
+        f('regState', t('Государство регистрации')), null)),
 
     el('div', { cls: 'card' },
-      el('h3', {}, 'Экипаж'),
+      el('h3', {}, t('Экипаж')),
       el('div', { cls: 'grid2' },
-        f('crewLic1', 'Государство выдачи свидетельства, 1-й пилот'),
-        f('crewLic2', 'Государство выдачи свидетельства, 2-й пилот')),
-      f('captain', 'КВС / представитель эксплуатанта')),
+        f('crewLic1', t('Государство выдачи свидетельства, 1-й пилот')),
+        f('crewLic2', t('Государство выдачи свидетельства, 2-й пилот'))),
+      f('captain', t('КВС / представитель эксплуатанта'))),
 
-    el('button', { cls: 'btn wide sp', onclick: scrInsp }, 'Готово'),
+    el('button', { cls: 'btn wide sp', onclick: scrInsp }, t('Готово')),
   ]);
 }
 
@@ -409,21 +435,21 @@ function scrGeneral() {
 
 function scrChecklist() {
   const ins = S.ins;
-  setHeader(`Чек-лист · ${progress(ins)}/${ITEMS.length}`, scrInsp);
+  setHeader(t('Чек-лист') + ' · ' + progress(ins) + '/' + ITEMS.length, scrInsp);
   const nodes = [];
 
   nodes.push(el('div', { cls: 'card xs mut' },
-    'Отметьте по каждому пункту: ',
-    el('b', {}, '✓'), ' соответствует · ',
-    el('b', {}, 'N'), ' не применимо · ',
-    el('b', {}, '!'), ' несоответствие (откроется выбор находки). ',
-    'Нажатие на название пункта открывает примечание и находки.'));
+    t('Отметьте по каждому пункту: '),
+    el('b', {}, '✓'), ' ' + t('соответствует · '),
+    el('b', {}, 'N'), ' ' + t('не применимо · '),
+    el('b', {}, '!'), ' ' + t('несоответствие (откроется выбор находки). '),
+    t('Нажатие на название пункта открывает примечание и находки.')));
 
   SECTIONS.forEach(sec => {
     const list = ITEMS.filter(i => i.sec === sec.id);
     const okN = list.filter(i => ins.items[i.id].s !== 'ni').length;
     nodes.push(el('div', { cls: 'sec-h' },
-      el('span', { cls: 'code' }, sec.id), el('span', { cls: 'grow' }, sec.ru),
+      el('span', { cls: 'code' }, sec.id), el('span', { cls: 'grow' }, L(sec)),
       el('span', { cls: 'pill pmut' }, `${okN}/${list.length}`)));
 
     list.forEach(it => {
@@ -443,26 +469,26 @@ function scrChecklist() {
           }, ic)));
       nodes.push(el('div', { cls: 'item' + (nf ? ' hasf' : '') },
         el('button', { cls: 'lab', onclick: () => scrItem(it.id) },
-          el('div', { cls: 'id' }, it.id + (nf ? ` · находок: ${nf}` : '') + (st.rmk ? ' · есть примечание' : '')),
-          el('div', { cls: 'nm' }, it.ru)),
+          el('div', { cls: 'id' }, it.id + (nf ? ' · ' + t('находок: ') + nf : '') + (st.rmk ? t(' · есть примечание') : '')),
+          el('div', { cls: 'nm' }, L(it))),
         sw));
     });
   });
 
-  nodes.push(el('button', { cls: 'btn wide sp', onclick: scrInsp }, 'Готово'));
+  nodes.push(el('button', { cls: 'btn wide sp', onclick: scrInsp }, t('Готово')));
   render(nodes);
 }
 
 function scrItem(id) {
   const ins = S.ins, it = ITEM_BY_ID[id], st = ins.items[id];
-  setHeader(id + ' — ' + it.ru, scrChecklist);
+  setHeader(id + ' — ' + L(it), scrChecklist);
   const mine = ins.findings.filter(f => f.item === id);
 
   render([
     el('div', { cls: 'card' },
       el('div', { cls: 'row' }, el('span', { cls: 'pill pmut' }, id),
-        el('span', { cls: 'right xs mut' }, `предописанных находок: ${it.n}`)),
-      el('h3', { style: 'margin-top:8px' }, it.ru),
+        el('span', { cls: 'right xs mut' }, t('предописанных находок: ') + it.n)),
+      el('h3', { style: 'margin-top:8px' }, L(it)),
       el('div', { cls: 'sm mut' }, it.en)),
 
     el('div', { cls: 'card' },
@@ -471,25 +497,25 @@ function scrItem(id) {
         el('button', {
           cls: 'btn ' + (st.s === k ? '' : 'sec'), style: 'flex:1;font-size:13px;padding:0 8px',
           onclick: async () => { st.s = k; await save(ins); scrItem(id); }
-        }, v.ru)))),
+        }, L(v))))),
 
     el('div', { cls: 'card' },
-      el('label', { cls: 'f' }, el('span', {}, 'Примечание (RMK)'),
+      el('label', { cls: 'f' }, el('span', {}, t('Примечание (RMK)')),
         el('textarea', {
-          placeholder: 'Свободный комментарий инспектора по пункту',
+          placeholder: t('Свободный комментарий инспектора по пункту'),
           oninput: e => { st.rmk = e.target.value; save(ins); }
         }, st.rmk))),
 
     el('div', { cls: 'card' },
-      el('div', { cls: 'row' }, el('h3', { cls: 'grow' }, 'Находки по пункту'),
+      el('div', { cls: 'row' }, el('h3', { cls: 'grow' }, t('Находки по пункту')),
         el('button', { cls: 'btn', style: 'min-height:38px;font-size:14px', onclick: () => addFinding(id, () => scrItem(id)) }, '+ Добавить')),
       mine.length ? el('div', { cls: 'sp' }, ...mine.map(f => findingRow(f, () => scrItem(id))))
-                  : el('div', { cls: 'sm mut sp' }, 'Находок по этому пункту нет.')),
+                  : el('div', { cls: 'sm mut sp' }, t('Находок по этому пункту нет.'))),
 
-    el('div', { cls: 'card', id: 'exBox' }, el('h3', {}, 'Примеры по пункту'),
-      el('div', { cls: 'sm mut' }, 'Загрузка…')),
+    el('div', { cls: 'card', id: 'exBox' }, el('h3', {}, t('Примеры по пункту')),
+      el('div', { cls: 'sm mut' }, t('Загрузка…'))),
 
-    el('button', { cls: 'btn sec wide sp', onclick: scrChecklist }, 'К чек-листу'),
+    el('button', { cls: 'btn sec wide sp', onclick: scrChecklist }, t('К чек-листу')),
   ]);
 
   // примеры подгружаются отдельно: чтение блобов не должно тормозить экран
@@ -497,10 +523,10 @@ function scrItem(id) {
     const box = $('#exBox');
     if (!box) return;
     box.innerHTML = '';
-    box.append(el('h3', {}, `Примеры по пункту (${own.length + ref.length})`));
+    box.append(el('h3', {}, t('Примеры по пункту') + ' (' + (own.length + ref.length) + ')'));
     if (!own.length && !ref.length) {
       box.append(el('div', { cls: 'sm mut' },
-        'Для этого пункта примеров ещё нет. Сфотографируйте несоответствие в находке и нажмите ★ на снимке.'));
+        t('Для этого пункта примеров ещё нет. Сфотографируйте несоответствие в находке и нажмите ★ на снимке.')));
       return;
     }
     const tiles = [
@@ -519,15 +545,15 @@ function scrItem(id) {
 function addFinding(itemId, after) {
   const ins = S.ins;
   const pool = PDF_BY_ITEM[itemId] || [];
-  sheet(`Находка · ${itemId} ${ITEM_BY_ID[itemId].ru}`, (box, close) => {
+  sheet(`${t('Находка')} · ${itemId} ${L(ITEM_BY_ID[itemId])}`, (box, close) => {
     const results = el('div');
     const q = el('input', {
-      placeholder: 'Поиск по формулировке или коду…',
+      placeholder: t('Поиск по формулировке или коду…'),
       oninput: e => draw(e.target.value.trim().toLowerCase()),
     });
     box.append(el('div', { cls: 'xs mut', style: 'margin-bottom:8px' },
-      `Предописанные находки (PDF) по пункту ${itemId}: ${pool.length}. ` +
-      'Формулировка на английском — в базу SAFA она вносится дословно.'));
+      t('Предописанные находки (PDF) по пункту ') + itemId + ': ' + pool.length + '. ' +
+      t('Формулировка на английском — в базу SAFA она вносится дословно.')));
     box.append(q, results);
 
     function pick(f) {
@@ -544,10 +570,10 @@ function addFinding(itemId, after) {
       results.innerHTML = '';
       const list = pool.filter(f => !term ||
         f.text.toLowerCase().includes(term) || f.code.toLowerCase().includes(term));
-      if (!list.length) results.append(el('div', { cls: 'sm mut', style: 'padding:8px 0' }, 'Ничего не найдено.'));
+      if (!list.length) results.append(el('div', { cls: 'sm mut', style: 'padding:8px 0' }, t('Ничего не найдено.')));
       list.forEach(f => results.append(el('button', { cls: 'opt', onclick: () => pick(f) },
         el('div', { cls: 'row' },
-          el('span', { cls: 'pill ' + CATS[f.cat].cls }, 'кат. ' + f.cat),
+          el('span', { cls: 'pill ' + CATS[f.cat].cls }, t('кат. ') + f.cat),
           el('span', { cls: 'xs mut right' }, f.code)),
         el('div', { cls: 'sm', style: 'margin-top:5px' }, f.text))));
       results.append(el('button', {
@@ -556,8 +582,8 @@ function addFinding(itemId, after) {
           ins.findings.push(nf); ins.items[itemId].s = 'f';
           save(ins).then(() => { close(); editFinding(nf, after); });
         }
-      }, el('div', { cls: 'b' }, '＋ Своя формулировка'),
-         el('div', { cls: 'xs mut' }, 'Если ни одна предописанная находка не подходит')));
+      }, el('div', { cls: 'b' }, t('＋ Своя формулировка')),
+         el('div', { cls: 'xs mut' }, t('Если ни одна предописанная находка не подходит'))));
     }
     draw('');
   });
@@ -566,8 +592,8 @@ function addFinding(itemId, after) {
 function findingRow(f, after) {
   return el('div', { cls: 'fnd k' + f.cat, onclick: () => editFinding(f, after), style: 'cursor:pointer' },
     el('div', { cls: 'row' },
-      el('span', { cls: 'pill ' + CATS[f.cat].cls }, 'кат. ' + f.cat),
-      el('span', { cls: 'xs mut' }, f.code || 'своя формулировка'),
+      el('span', { cls: 'pill ' + CATS[f.cat].cls }, t('кат. ') + f.cat),
+      el('span', { cls: 'xs mut' }, f.code || t('своя формулировка')),
       el('span', { cls: 'right xs mut' }, f.item),
       (f.photos || []).length ? el('span', { cls: 'xs mut' }, `📷 ${f.photos.length}`) : null),
     el('div', { cls: 'sm', style: 'margin-top:4px' }, f.text),
@@ -580,11 +606,11 @@ function editFinding(f, after) {
     const done = () => { save(ins).then(() => { close(); after && after(); }); };
 
     box.append(el('div', { cls: 'card' },
-      el('div', { cls: 'xs mut' }, f.item + ' — ' + ITEM_BY_ID[f.item].ru),
-      el('label', { cls: 'f sp' }, el('span', {}, 'Формулировка находки (английский, для базы SAFA)'),
+      el('div', { cls: 'xs mut' }, f.item + ' — ' + L(ITEM_BY_ID[f.item])),
+      el('label', { cls: 'f sp' }, el('span', {}, t('Формулировка находки (английский, для базы SAFA)')),
         el('textarea', { oninput: e => f.text = e.target.value }, f.text)),
-      el('label', { cls: 'f' }, el('span', {}, 'Пояснение инспектора (русский, в акт)'),
-        el('textarea', { placeholder: 'Что конкретно выявлено, где, чем подтверждается', oninput: e => f.note = e.target.value }, f.note))));
+      el('label', { cls: 'f' }, el('span', {}, t('Пояснение инспектора (русский, в акт)')),
+        el('textarea', { placeholder: t('Что конкретно выявлено, где, чем подтверждается'), oninput: e => f.note = e.target.value }, f.note))));
 
     const catBox = el('div', { cls: 'row wrap' });
     const drawCats = () => {
@@ -599,9 +625,9 @@ function editFinding(f, after) {
     };
     drawCats();
     box.append(el('div', { cls: 'card' },
-      el('h3', {}, 'Категория'), catBox,
-      el('div', { cls: 'xs mut sp' }, CATS[f.cat] ? CATS[f.cat].ru : ''),
-      f.refs ? el('div', { cls: 'xs mut sp' }, 'Ссылки на нормы: ' + f.refs) : null));
+      el('h3', {}, t('Категория')), catBox,
+      el('div', { cls: 'xs mut sp' }, CATS[f.cat] ? L(CATS[f.cat]) : ''),
+      f.refs ? el('div', { cls: 'xs mut sp' }, t('Ссылки на нормы: ') + f.refs) : null));
 
     // фотографии
     const thumbs = el('div', { cls: 'thumbs' });
@@ -619,7 +645,7 @@ function editFinding(f, after) {
             }
           }, '×'),
           el('button', {
-            cls: 'star', title: 'В библиотеку примеров',
+            cls: 'star', title: t('В библиотеку примеров'),
             onclick: () => addToLibrary(f, blob),
           }, '★'));
         thumbs.append(wrap);
@@ -640,19 +666,19 @@ function editFinding(f, after) {
     });
     box.append(el('div', { cls: 'card' },
       el('div', { cls: 'row' }, el('h3', { cls: 'grow' }, 'Фотофиксация'),
-        el('button', { cls: 'btn', style: 'min-height:38px;font-size:14px', onclick: () => file.click() }, '📷 Снять')),
+        el('button', { cls: 'btn', style: 'min-height:38px;font-size:14px', onclick: () => file.click() }, t('📷 Снять'))),
       file, thumbs));
 
-    box.append(el('button', { cls: 'btn wide', onclick: done }, 'Сохранить находку'));
+    box.append(el('button', { cls: 'btn wide', onclick: done }, t('Сохранить находку')));
     box.append(el('button', {
       cls: 'btn dan wide sp', onclick: async () => {
-        if (!confirm('Удалить находку?')) return;
+        if (!confirm(t('Удалить находку?'))) return;
         for (const p of (f.photos || [])) await DB.photoDel(p);
         ins.findings = ins.findings.filter(x => x.id !== f.id);
         if (!ins.findings.some(x => x.item === f.item)) ins.items[f.item].s = 'ok';
         await save(ins); close(); after && after();
       }
-    }, 'Удалить находку'));
+    }, t('Удалить находку')));
   });
 }
 
@@ -681,13 +707,13 @@ function addToLibrary(f, blob) {
   const rec = {
     id: uid(), item: f.item, cat: f.cat, verdict: 'bad', kind: 'photo',
     title: (f.text || '').slice(0, 80), note: f.note || '',
-    source: 'Собственная инспекция', createdAt: new Date().toISOString(), photoId: '',
+    source: t('Собственная инспекция'), createdAt: new Date().toISOString(), photoId: '',
   };
   sheet('В библиотеку примеров', (box, close) => {
     const vBox = el('div', { cls: 'row', style: 'gap:8px' });
     const drawV = () => {
       vBox.innerHTML = '';
-      [['bad', 'Как плохо (несоответствие)'], ['good', 'Как хорошо (норма)']].forEach(([k, t]) =>
+      [['bad', t('Как плохо (несоответствие)')], ['good', t('Как хорошо (норма)')]].forEach(([k, t]) =>
         vBox.append(el('button', {
           cls: 'btn ' + (rec.verdict === k ? '' : 'sec'), style: 'flex:1;font-size:13px',
           onclick: () => { rec.verdict = k; drawV(); }
@@ -698,12 +724,12 @@ function addToLibrary(f, blob) {
       el('div', { cls: 'card' },
         el('img', { src: URL.createObjectURL(blob), style: 'width:100%;max-height:230px;object-fit:contain;border-radius:9px' })),
       el('div', { cls: 'card' },
-        el('label', { cls: 'f' }, el('span', {}, 'Что показывает пример'),
+        el('label', { cls: 'f' }, el('span', {}, t('Что показывает пример')),
           el('input', { value: rec.title, oninput: e => rec.title = e.target.value })),
-        el('label', { cls: 'f' }, el('span', {}, 'Пояснение — на что смотреть'),
+        el('label', { cls: 'f' }, el('span', {}, t('Пояснение — на что смотреть')),
           el('textarea', { oninput: e => rec.note = e.target.value }, rec.note)),
-        el('div', { cls: 'xs mut', style: 'margin-bottom:6px' }, 'Тип примера'), vBox,
-        el('div', { cls: 'xs mut sp' }, `Пункт ${rec.item} — ${ITEM_BY_ID[rec.item].ru}, категория ${rec.cat}`)),
+        el('div', { cls: 'xs mut', style: 'margin-bottom:6px' }, t('Тип примера')), vBox,
+        el('div', { cls: 'xs mut sp' }, `${t('Пункт')} ${rec.item} — ${L(ITEM_BY_ID[rec.item])}, ${t('категория')} ${rec.cat}`)),
       el('button', {
         cls: 'btn wide', onclick: async () => {
           rec.photoId = uid();
@@ -711,7 +737,7 @@ function addToLibrary(f, blob) {
           await DB.libPut(rec);
           close(); toast('Добавлено в библиотеку примеров');
         }
-      }, 'Добавить'));
+      }, t('Добавить')));
   });
 }
 
@@ -725,7 +751,7 @@ async function examplesFor(itemId) {
 function galleryTile(o) {
   // o: {src, verdict, kind, title, note, source}
   const vc = o.kind === 'scheme' ? 'sch' : (o.verdict === 'good' ? 'good' : 'bad');
-  const vt = o.kind === 'scheme' ? 'схема' : (o.verdict === 'good' ? 'как хорошо' : 'как плохо');
+  const vt = o.kind === 'scheme' ? t('схема') : (o.verdict === 'good' ? t('как хорошо') : t('как плохо'));
   return el('figure', { style: 'cursor:pointer', onclick: () => lightbox(o) },
     el('img', { src: o.src, loading: 'lazy', alt: o.title || '' }),
     el('figcaption', {},
@@ -741,9 +767,9 @@ function lightbox(o) {
       el('div', { cls: 'b' }, o.title || ''),
       o.note ? el('div', { style: 'margin-top:5px' }, o.note) : null,
       o.item ? el('div', { cls: 'xs', style: 'margin-top:5px;opacity:.7' },
-        o.item + ' — ' + (ITEM_BY_ID[o.item] ? ITEM_BY_ID[o.item].ru : '')) : null,
+        o.item + ' — ' + (ITEM_BY_ID[o.item] ? L(ITEM_BY_ID[o.item]) : '')) : null,
       o.source ? el('div', { cls: 'xs', style: 'margin-top:4px;opacity:.55' }, 'Источник: ' + o.source) : null),
-    el('button', { cls: 'btn sec' }, 'Закрыть'));
+    el('button', { cls: 'btn sec' }, t('Закрыть')));
   document.body.append(wrap);
 }
 
@@ -762,10 +788,10 @@ async function ownTiles(records, onDeleted) {
         cls: 'btn sec', style: 'width:100%;min-height:34px;font-size:12px;border-radius:0',
         onclick: async e => {
           e.stopPropagation();
-          if (!confirm('Убрать пример из библиотеки?')) return;
+          if (!confirm(t('Убрать пример из библиотеки?'))) return;
           await DB.photoDel(r.photoId); await DB.libDel(r.id); onDeleted();
         }
-      }, 'Убрать'));
+      }, t('Убрать')));
     }
     out.push(tile);
   }
@@ -775,7 +801,7 @@ async function ownTiles(records, onDeleted) {
 let galState = { item: '', v: '' };
 
 async function scrGallery() {
-  setHeader('Примеры: как хорошо, как плохо', null);
+  setHeader(t('Примеры: как хорошо, как плохо'), null);
   const { own, ref } = await examplesFor(galState.item || '');
   const pass = o => !galState.v || (galState.v === 'scheme' ? o.kind === 'scheme'
     : (o.kind !== 'scheme' && o.verdict === galState.v));
@@ -787,36 +813,36 @@ async function scrGallery() {
   const mine = await ownTiles(own.filter(pass), scrGallery);
 
   const filters = el('div', { cls: 'row', style: 'gap:6px' },
-    ...[['', 'Все'], ['bad', 'Как плохо'], ['good', 'Как хорошо'], ['scheme', 'Схемы']].map(([k, t]) =>
+    ...[['', t('Все')], ['bad', t('Как плохо')], ['good', t('Как хорошо')], ['scheme', t('Схемы')]].map(([k, t]) =>
       el('button', {
         cls: 'btn ' + (galState.v === k ? '' : 'sec'), style: 'flex:1;min-height:40px;font-size:13px',
         onclick: () => { galState.v = k; scrGallery(); }
       }, t)));
 
   const sel = el('select', { onchange: e => { galState.item = e.target.value; scrGallery(); } },
-    el('option', { value: '' }, 'Все пункты'),
+    el('option', { value: '' }, t('Все пункты')),
     ...ITEMS.map(i => el('option', { value: i.id, selected: galState.item === i.id ? 'selected' : false },
-      `${i.id} — ${i.ru}`)));
+      `${i.id} — ${L(i)}`)));
 
   render([
     el('div', { cls: 'card' },
       el('div', { cls: 'xs mut', style: 'margin-bottom:8px' },
-        'Свои примеры добавляются прямо с инспекции: в находке нажмите ★ на снимке. ' +
-        'Библиотека растёт от выезда к выезду и работает офлайн.'),
+        t('Свои примеры добавляются прямо с инспекции: в находке нажмите ★ на снимке. ') +
+        t('Библиотека растёт от выезда к выезду и работает офлайн.')),
       filters, el('div', { cls: 'sp' }, sel)),
-    mine.length ? el('div', { cls: 'sec-h' }, `Свои примеры (${mine.length})`) : null,
+    mine.length ? el('div', { cls: 'sec-h' }, t('Свои примеры') + ' (' + mine.length + ')') : null,
     mine.length ? el('div', { cls: 'gal' }, ...mine) : null,
-    refTiles.length ? el('div', { cls: 'sec-h' }, `Из руководств (${refTiles.length})`) : null,
+    refTiles.length ? el('div', { cls: 'sec-h' }, t('Из руководств') + ' (' + refTiles.length + ')') : null,
     refTiles.length ? el('div', { cls: 'gal' }, ...refTiles) : null,
     (!mine.length && !refTiles.length) ? el('div', { cls: 'empty' },
-      el('div', { cls: 'b' }, 'Примеров пока нет'),
-      el('div', { cls: 'sm sp' }, 'Сфотографируйте несоответствие на инспекции и нажмите ★ на снимке — он попадёт сюда.')) : null,
+      el('div', { cls: 'b' }, t('Примеров пока нет')),
+      el('div', { cls: 'sm sp' }, t('Сфотографируйте несоответствие на инспекции и нажмите ★ на снимке — он попадёт сюда.'))) : null,
   ]);
 }
 
 function scrFindings() {
   const ins = S.ins;
-  setHeader(`Находки · ${ins.findings.length}`, scrInsp);
+  setHeader(t('Находки') + ' · ' + ins.findings.length, scrInsp);
   const nodes = [];
   const mc = maxCat(ins);
 
@@ -825,22 +851,22 @@ function scrFindings() {
       ...[3, 2, 1, 'G'].map(k => {
         const n = ins.findings.filter(f => String(f.cat) === String(k)).length;
         return el('span', { cls: 'pill ' + CATS[k].cls, style: n ? '' : 'opacity:.35' },
-          (k === 'G' ? 'G' : 'кат. ' + k) + ': ' + n);
+          (k === 'G' ? 'G' : t('кат. ') + k) + ': ' + n);
       })),
     mc === 3 ? el('div', { cls: 'sm sp', style: 'margin-top:9px' },
-      '⚠️ Есть находка категории 3 — требуются корректирующие действия до вылета либо ограничение эксплуатации (класс 3a/3b/3c).') : null));
+      t('⚠️ Есть находка категории 3 — требуются корректирующие действия до вылета либо ограничение эксплуатации (класс 3a/3b/3c).')) : null));
 
   if (!ins.findings.length) {
-    nodes.push(el('div', { cls: 'empty' }, 'Несоответствий не выявлено. Находки добавляются из чек-листа кнопкой «!».'));
+    nodes.push(el('div', { cls: 'empty' }, t('Несоответствий не выявлено. Находки добавляются из чек-листа кнопкой «!».')));
   } else {
     SECTIONS.forEach(sec => {
       const list = ins.findings.filter(f => f.item[0] === sec.id);
       if (!list.length) return;
-      nodes.push(el('div', { cls: 'sec-h' }, el('span', { cls: 'code' }, sec.id), sec.ru));
+      nodes.push(el('div', { cls: 'sec-h' }, el('span', { cls: 'code' }, sec.id), L(sec)));
       list.forEach(f => nodes.push(el('div', { cls: 'card' }, findingRow(f, scrFindings))));
     });
   }
-  nodes.push(el('button', { cls: 'btn sec wide sp', onclick: scrInsp }, 'Назад'));
+  nodes.push(el('button', { cls: 'btn sec wide sp', onclick: scrInsp }, t('Назад')));
   render(nodes);
 }
 
@@ -848,45 +874,45 @@ function scrFindings() {
 
 function scrReport() {
   const ins = S.ins;
-  setHeader('Отчёт (PI)', scrInsp);
+  setHeader(t('Отчёт (PI)'), scrInsp);
   const sug = suggestClass(ins);
 
   const clsBox = el('div');
   const drawCls = () => {
     clsBox.innerHTML = '';
-    ACTIONS.forEach(([k, t, en]) => clsBox.append(el('button', {
+    ACTIONS.forEach(([k, ru, en]) => clsBox.append(el('button', {
       cls: 'opt' + (ins.actClass === k ? ' on' : ''),
       onclick: () => { ins.actClass = ins.actClass === k ? '' : k; save(ins); drawCls(); }
     }, el('div', { cls: 'row' }, el('span', { cls: 'pill pmut' }, k),
-      el('span', { cls: 'sm grow' }, t),
-      k === sug ? el('span', { cls: 'pill pok xs' }, 'рекомендуется') : null),
-      el('div', { cls: 'xs mut', style: 'margin-top:3px;margin-left:34px' }, en))));
+      el('span', { cls: 'sm grow' }, CFG.d.lang === 'en' ? en : ru),
+      k === sug ? el('span', { cls: 'pill pok xs' }, t('рекомендуется')) : null),
+      el('div', { cls: 'xs mut', style: 'margin-top:3px;margin-left:34px' }, CFG.d.lang === 'en' ? ru : en))));
   };
   drawCls();
 
   render([
     el('div', { cls: 'card' },
-      el('h3', {}, 'Класс принятых мер'),
+      el('h3', {}, t('Класс принятых мер')),
       el('div', { cls: 'xs mut', style: 'margin-bottom:8px' },
-        sug ? `По максимальной категории находок (${maxCat(ins)}) рекомендуется класс ${sug}.`
-            : 'Находок нет — класс мер обычно не назначается.'),
+        sug ? t('По максимальной категории находок (') + maxCat(ins) + t(') рекомендуется класс ') + sug + '.'
+            : t('Находок нет — класс мер обычно не назначается.')),
       clsBox),
 
     el('div', { cls: 'card' },
-      el('label', { cls: 'f' }, el('span', {}, 'Дополнительная информация / комментарии'),
+      el('label', { cls: 'f' }, el('span', {}, t('Дополнительная информация / комментарии')),
         el('textarea', { style: 'min-height:110px', oninput: e => { ins.comments = e.target.value; save(ins); } }, ins.comments))),
 
-    sigCard('insp', 'Подпись инспектора АГА РТ', ins.gen.inspector),
-    sigCard('cap', 'Подпись КВС / представителя эксплуатанта', ins.gen.captain),
+    sigCard('insp', t('Подпись инспектора АГА РТ'), ins.gen.inspector),
+    sigCard('cap', t('Подпись КВС / представителя эксплуатанта'), ins.gen.captain),
 
     el('div', { cls: 'card' },
       el('h3', {}, 'Выдача и отправка'),
-      el('button', { cls: 'btn wide', onclick: () => printPI(ins) }, '🖨 Печать / сохранить PDF'),
-      el('button', { cls: 'btn sec wide sp', onclick: () => exportJSON(ins) }, '⬇ Выгрузить JSON'),
+      el('button', { cls: 'btn wide', onclick: () => printPI(ins) }, t('🖨 Печать / сохранить PDF')),
+      el('button', { cls: 'btn sec wide sp', onclick: () => exportJSON(ins) }, t('⬇ Выгрузить JSON')),
       el('button', { cls: 'btn sec wide sp', onclick: () => syncOne(ins) },
-        '☁ Отправить в управление' + (ins.sync.state === 'sent' ? ' (уже отправлена)' : '')),
+        t('☁ Отправить в управление') + (ins.sync.state === 'sent' ? t(' (уже отправлена)') : '')),
       CFG.d.gasUrl ? null : el('div', { cls: 'xs mut sp' },
-        'Адрес сервера синхронизации не задан — укажите его в «Настройки → Синхронизация».')),
+        t('Адрес сервера синхронизации не задан — укажите его в «Настройки → Синхронизация».'))),
   ]);
 }
 
@@ -898,8 +924,8 @@ function sigCard(key, title, who) {
     el('div', { cls: 'xs mut', style: 'margin-bottom:6px' }, who || '—'),
     c,
     el('div', { cls: 'row sp' },
-      el('button', { cls: 'btn sec grow', style: 'min-height:40px;font-size:14px', onclick: () => { clear(); ins.sig[key] = ''; save(ins); } }, 'Очистить'),
-      el('button', { cls: 'btn grow', style: 'min-height:40px;font-size:14px', onclick: () => { ins.sig[key] = c.toDataURL('image/png'); save(ins); toast('Подпись сохранена'); } }, 'Сохранить')));
+      el('button', { cls: 'btn sec grow', style: 'min-height:40px;font-size:14px', onclick: () => { clear(); ins.sig[key] = ''; save(ins); } }, t('Очистить')),
+      el('button', { cls: 'btn grow', style: 'min-height:40px;font-size:14px', onclick: () => { ins.sig[key] = c.toDataURL('image/png'); save(ins); toast('Подпись сохранена'); } }, t('Сохранить'))));
 
   requestAnimationFrame(() => {
     const r = c.getBoundingClientRect();
@@ -948,8 +974,8 @@ function printPI(ins) {
         ${f.refs ? '<br><span style="font-size:8pt;color:#555">' + esc(f.refs) + '</span>' : ''}</td></tr>`).join('')
     : `<tr><td colspan="4" style="border:1px solid #999;padding:5px">Несоответствий не выявлено / No findings</td></tr>`;
 
-  const act = ACTIONS.map(([k, t, en]) =>
-    `<div>${ins.actClass === k ? '☒' : '☐'} <b>${k})</b> ${esc(t)}
+  const act = ACTIONS.map(([k, ru, en]) =>
+    `<div>${ins.actClass === k ? '☒' : '☐'} <b>${k})</b> ${esc(ru)}
       <span style="color:#555"> / ${esc(en)}</span></div>`).join('');
 
   const sig = (d, cap) => `<td style="border:1px solid #999;padding:5px;width:50%;vertical-align:top">
@@ -1077,7 +1103,7 @@ function scrRef() {
 
 function refHubStrip() {
   return el('div', { cls: 'row', style: 'gap:6px;margin-bottom:10px' },
-    ...[['pdf', 'Формулировки'], ['gal', 'Примеры']].map(([k, t]) =>
+    ...[['pdf', t('Формулировки')], ['gal', t('Примеры')]].map(([k, t]) =>
       el('button', {
         cls: 'btn ' + (refState.tab === k ? '' : 'sec'), style: 'flex:1;min-height:42px',
         onclick: () => { refState.tab = k; scrRef(); }
@@ -1085,22 +1111,22 @@ function refHubStrip() {
 }
 
 function scrRefFindings() {
-  setHeader('Справочник находок', null);
+  setHeader(t('Справочник находок'), null);
   const out = el('div');
 
-  const q = el('input', { placeholder: 'Поиск по формулировке, коду или норме…', value: refState.q,
+  const q = el('input', { placeholder: t('Поиск по формулировке, коду или норме…'), value: refState.q,
     oninput: e => { refState.q = e.target.value; draw(); } });
 
   const selItem = el('select', { onchange: e => { refState.item = e.target.value; draw(); } },
-    el('option', { value: '' }, 'Все пункты'),
+    el('option', { value: '' }, t('Все пункты')),
     ...ITEMS.map(i => el('option', { value: i.id, selected: refState.item === i.id ? 'selected' : false },
-      `${i.id} — ${i.ru} (${i.n})`)));
+      `${i.id} — ${L(i)} (${i.n})`)));
 
   const cats = el('div', { cls: 'row', style: 'gap:6px' },
     ...['', '1', '2', '3', 'G'].map(k => el('button', {
       cls: 'btn ' + (refState.cat === k ? '' : 'sec'), style: 'flex:1;min-height:40px;font-size:13px',
       onclick: () => { refState.cat = k; scrRef(); }
-    }, k === '' ? 'Все' : (k === 'G' ? 'G' : 'Кат. ' + k))));
+    }, k === '' ? t('Все') : (k === 'G' ? 'G' : 'Кат. ' + k))));
 
   function draw() {
     const t = refState.q.trim().toLowerCase();
@@ -1110,15 +1136,15 @@ function scrRefFindings() {
       (!t || f.text.toLowerCase().includes(t) || f.code.toLowerCase().includes(t)
           || (f.refs || '').toLowerCase().includes(t)));
     out.innerHTML = '';
-    out.append(el('div', { cls: 'xs mut', style: 'margin:8px 0' }, `Найдено: ${list.length} из ${PDF.length}`));
+    out.append(el('div', { cls: 'xs mut', style: 'margin:8px 0' }, t('Найдено: ') + list.length + ' ' + t('из') + ' ' + PDF.length));
     list.slice(0, 300).forEach(f => out.append(el('div', { cls: 'card' },
       el('div', { cls: 'row' },
-        el('span', { cls: 'pill ' + CATS[f.cat].cls }, 'кат. ' + f.cat),
+        el('span', { cls: 'pill ' + CATS[f.cat].cls }, t('кат. ') + f.cat),
         el('span', { cls: 'xs mut' }, f.code),
-        el('span', { cls: 'right xs mut' }, ITEM_BY_ID[f.item] ? ITEM_BY_ID[f.item].ru : f.item)),
+        el('span', { cls: 'right xs mut' }, ITEM_BY_ID[f.item] ? L(ITEM_BY_ID[f.item]) : f.item)),
       el('div', { cls: 'sm', style: 'margin-top:6px' }, f.text),
       f.refs ? el('div', { cls: 'xs mut', style: 'margin-top:4px' }, f.refs) : null)));
-    if (list.length > 300) out.append(el('div', { cls: 'xs mut' }, 'Показаны первые 300 — уточните запрос.'));
+    if (list.length > 300) out.append(el('div', { cls: 'xs mut' }, t('Показаны первые 300 — уточните запрос.')));
   }
   draw();
 
@@ -1126,8 +1152,8 @@ function scrRefFindings() {
     refHubStrip(),
     el('div', { cls: 'card' },
       el('div', { cls: 'xs mut', style: 'margin-bottom:8px' },
-        `База предописанных находок (PDF): ${PDF.length} формулировок по ${ITEMS.length} пунктам. ` +
-        'Источник — EASA RIM Appendix 1, Issue 6.'),
+        t('База предописанных находок (PDF): ') + PDF.length + t(' формулировок по ') + ITEMS.length + t(' пунктам.') + ' ' +
+        t('Источник — EASA RIM Appendix 1, Issue 6.')),
       q, el('div', { cls: 'sp' }, selItem), el('div', { cls: 'sp' }, cats)),
     out,
   ]);
@@ -1138,27 +1164,27 @@ function scrRefFindings() {
 let TR = null;
 
 function scrTrain() {
-  setHeader('Тренажёр инспектора', null);
+  setHeader(t('Тренажёр инспектора'), null);
   if (!TR) {
     return render([
       el('div', { cls: 'card' },
-        el('h3', {}, 'Категорирование находок'),
+        el('h3', {}, t('Категорирование находок')),
         el('div', { cls: 'sm mut' },
-          'Тренировка на реальной базе из ' + PDF.length + ' предописанных находок SAFA. ' +
-          'Правильный ответ — тот, что закреплён в Appendix 1, Issue 6.'),
+          t('Тренировка на реальной базе из ') + PDF.length + ' предописанных находок SAFA. ' +
+          t('Правильный ответ — тот, что закреплён в Appendix 1, Issue 6.')),
         el('div', { cls: 'sp' },
-          el('button', { cls: 'btn wide', onclick: () => startTrain('cat', 15) }, 'Определить категорию (15 вопросов)'),
-          el('button', { cls: 'btn sec wide sp', onclick: () => startTrain('item', 15) }, 'Определить пункт чек-листа (15)'),
-          el('button', { cls: 'btn sec wide sp', onclick: () => startTrain('mix', 25) }, 'Смешанный режим (25)'))),
+          el('button', { cls: 'btn wide', onclick: () => startTrain('cat', 15) }, t('Определить категорию (15 вопросов)')),
+          el('button', { cls: 'btn sec wide sp', onclick: () => startTrain('item', 15) }, t('Определить пункт чек-листа (15)')),
+          el('button', { cls: 'btn sec wide sp', onclick: () => startTrain('mix', 25) }, t('Смешанный режим (25)')))),
       el('div', { cls: 'card' },
-        el('h3', {}, 'Как категорируются находки'),
+        el('h3', {}, t('Как категорируются находки')),
         ...[1, 2, 3, 'G'].map(k => el('div', { cls: 'sp' },
           el('span', { cls: 'pill ' + CATS[k].cls }, k === 'G' ? 'G' : 'Категория ' + k),
-          el('div', { cls: 'sm', style: 'margin-top:4px' }, CATS[k].ru)))),
+          el('div', { cls: 'sm', style: 'margin-top:4px' }, L(CATS[k]))))),
       el('div', { cls: 'card' },
-        el('h3', {}, 'Классы принятых мер'),
-        ...ACTIONS.map(([k, t]) => el('div', { cls: 'row sp' },
-          el('span', { cls: 'pill pmut' }, k), el('span', { cls: 'sm grow' }, t)))),
+        el('h3', {}, t('Классы принятых мер')),
+        ...ACTIONS.map(([k, ru, en]) => el('div', { cls: 'row sp' },
+          el('span', { cls: 'pill pmut' }, k), el('span', { cls: 'sm grow' }, CFG.d.lang === 'en' ? en : ru)))),
     ]);
   }
   drawQuestion();
@@ -1174,17 +1200,17 @@ function drawQuestion() {
   if (TR.i >= TR.qs.length) return drawResult();
   const f = TR.qs[TR.i];
   const kind = TR.mode === 'mix' ? (TR.i % 2 ? 'item' : 'cat') : TR.mode;
-  setHeader(`Вопрос ${TR.i + 1} из ${TR.qs.length}`, () => { TR = null; scrTrain(); });
+  setHeader(t('Вопрос') + ' ' + (TR.i + 1) + ' ' + t('из') + ' ' + TR.qs.length, () => { TR = null; scrTrain(); });
 
   const opts = el('div');
   let correct, choices;
   if (kind === 'cat') {
     correct = String(f.cat);
-    choices = ['1', '2', '3', 'G'].map(k => [k, (k === 'G' ? 'General — вне категорий' : 'Категория ' + k + ' — ' + CATS[k].ru.split('— ')[1])]);
+    choices = ['1', '2', '3', 'G'].map(k => [k, (k === 'G' ? t('General — вне категорий') : L(CATS[k]))]);
   } else {
     correct = f.item;
     const others = ITEMS.filter(i => i.id !== f.item).sort(() => Math.random() - 0.5).slice(0, 3);
-    choices = [...others.map(i => [i.id, i.id + ' — ' + i.ru]), [f.item, f.item + ' — ' + ITEM_BY_ID[f.item].ru]]
+    choices = [...others.map(i => [i.id, i.id + ' — ' + L(i)]), [f.item, f.item + ' — ' + L(ITEM_BY_ID[f.item])]]
       .sort(() => Math.random() - 0.5);
   }
 
@@ -1205,22 +1231,22 @@ function drawQuestion() {
   buttons.forEach(b => opts.append(b));
 
   const expl = el('div', { cls: 'card', hidden: 'hidden' },
-    el('div', { cls: 'row' }, el('span', { cls: 'pill ' + CATS[f.cat].cls }, 'кат. ' + f.cat),
+    el('div', { cls: 'row' }, el('span', { cls: 'pill ' + CATS[f.cat].cls }, t('кат. ') + f.cat),
       el('span', { cls: 'xs mut' }, f.code)),
-    el('div', { cls: 'sm sp' }, ITEM_BY_ID[f.item].id + ' — ' + ITEM_BY_ID[f.item].ru),
-    f.refs ? el('div', { cls: 'xs mut sp' }, 'Нормы: ' + f.refs) : null);
+    el('div', { cls: 'sm sp' }, ITEM_BY_ID[f.item].id + ' — ' + L(ITEM_BY_ID[f.item])),
+    f.refs ? el('div', { cls: 'xs mut sp' }, t('Нормы: ') + f.refs) : null);
 
   const next = el('button', {
     cls: 'btn wide sp', hidden: 'hidden',
     onclick: () => { TR.i++; TR.answered = false; drawQuestion(); }
-  }, TR.i + 1 >= TR.qs.length ? 'Показать результат' : 'Следующий вопрос');
+  }, TR.i + 1 >= TR.qs.length ? t('Показать результат') : t('Следующий вопрос'));
 
   render([
     el('div', { cls: 'card' },
       el('div', { cls: 'bar' }, el('i', { style: `width:${TR.i / TR.qs.length * 100}%` })),
       el('div', { cls: 'xs mut sp' }, kind === 'cat'
-        ? 'Какую категорию имеет эта находка?'
-        : 'К какому пункту чек-листа относится эта находка?'),
+        ? t('Какую категорию имеет эта находка?')
+        : t('К какому пункту чек-листа относится эта находка?')),
       el('div', { cls: 'b sp', style: 'margin-top:9px;font-size:16px' }, f.text)),
     opts, expl, next,
   ]);
@@ -1228,32 +1254,32 @@ function drawQuestion() {
 
 function drawResult() {
   const pct = Math.round(TR.right / TR.qs.length * 100);
-  setHeader('Результат', () => { TR = null; scrTrain(); });
+  setHeader(t('Результат'), () => { TR = null; scrTrain(); });
   render([
     el('div', { cls: 'card', style: 'text-align:center' },
       el('div', { style: 'font-size:44px;font-weight:700' }, pct + '%'),
-      el('div', { cls: 'mut' }, `${TR.right} из ${TR.qs.length} верно`),
+      el('div', { cls: 'mut' }, TR.right + ' ' + t('из') + ' ' + TR.qs.length + t(' верно')),
       el('div', { cls: 'sm sp', style: 'margin-top:10px' },
-        pct >= 80 ? 'Отличный результат — категорирование уверенное.'
-      : pct >= 60 ? 'Неплохо, но разберите ошибки ниже.'
-                  : 'Стоит повторить Appendix 1 по разобранным пунктам.')),
-    ...(TR.wrong.length ? [el('div', { cls: 'sec-h' }, 'Разбор ошибок')] : []),
+        pct >= 80 ? t('Отличный результат — категорирование уверенное.')
+      : pct >= 60 ? t('Неплохо, но разберите ошибки ниже.')
+                  : t('Стоит повторить Appendix 1 по разобранным пунктам.'))),
+    ...(TR.wrong.length ? [el('div', { cls: 'sec-h' }, t('Разбор ошибок'))] : []),
     ...TR.wrong.map(w => el('div', { cls: 'card' },
       el('div', { cls: 'sm b' }, w.f.text),
       el('div', { cls: 'row sp', style: 'margin-top:7px' },
-        el('span', { cls: 'pill cat3' }, 'вы: ' + w.given),
-        el('span', { cls: 'pill pok' }, 'верно: ' + (w.kind === 'cat' ? w.f.cat : w.f.item))),
-      el('div', { cls: 'xs mut sp' }, w.f.code + ' · ' + ITEM_BY_ID[w.f.item].ru))),
-    el('button', { cls: 'btn wide sp', onclick: () => { TR = null; scrTrain(); } }, 'В меню тренажёра'),
+        el('span', { cls: 'pill cat3' }, t('вы: ') + w.given),
+        el('span', { cls: 'pill pok' }, t('верно: ') + (w.kind === 'cat' ? w.f.cat : w.f.item))),
+      el('div', { cls: 'xs mut sp' }, w.f.code + ' · ' + L(ITEM_BY_ID[w.f.item])))),
+    el('button', { cls: 'btn wide sp', onclick: () => { TR = null; scrTrain(); } }, t('В меню тренажёра')),
   ]);
 }
 
 /* ══════════════ экран: сводка ══════════════ */
 
 async function scrStats() {
-  setHeader('Сводка', null);
+  setHeader(t('Сводка'), null);
   const all = await DB.all();
-  if (!all.length) return render(el('div', { cls: 'empty' }, 'Данных пока нет.'));
+  if (!all.length) return render(el('div', { cls: 'empty' }, t('Данных пока нет.')));
 
   const byType = {}, byOp = {}, byItem = {};
   let f1 = 0, f2 = 0, f3 = 0, grounded = 0;
@@ -1270,33 +1296,60 @@ async function scrStats() {
   const ratio = (totF / all.length).toFixed(2);
   const top = Object.entries(byItem).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
+  // ── KPI эффекта: измеримая польза внедрения ──
+  let durSum = 0, durN = 0, covSum = 0, fPhoto = 0, fTot = 0, compl = 0, sent = 0;
+  all.forEach(i => {
+    const mins = (new Date(i.updatedAt) - new Date(i.createdAt)) / 60000;
+    if (mins > 0.5) { durSum += mins; durN++; }
+    covSum += progress(i) / ITEMS.length;
+    i.findings.forEach(f => { fTot++; if ((f.photos || []).length) fPhoto++; });
+    if (i.status === 'completed') { compl++; if (i.sync.state === 'sent') sent++; }
+  });
+  const avgMin = durN ? Math.round(durSum / durN) : null;
+  const covPct = Math.round(covSum / all.length * 100);
+  const photoPct = fTot ? Math.round(fPhoto / fTot * 100) : null;
+  const digPct = compl ? Math.round(sent / compl * 100) : null;
+  const kpi = (val, cap, sub) => el('div', { cls: 'kpi' },
+    el('div', { cls: 'kpi-v' }, val),
+    el('div', { cls: 'kpi-c' }, cap),
+    el('div', { cls: 'kpi-s' }, sub));
+
   render([
     el('div', { cls: 'card' },
-      el('h3', {}, 'Всего'),
+      el('h3', {}, t('KPI эффекта')),
+      el('div', { cls: 'xs mut', style: 'margin-bottom:10px' }, t('Измеримый эффект внедрения — для заявки и презентации.')),
+      el('div', { cls: 'kpis' },
+        kpi(avgMin != null ? avgMin + t(' мин') : t('нет данных'), t('Ср. время инспекции'), t('от начала до завершения')),
+        kpi(covPct + '%', t('Полнота чек-листа'), t('ср. охват 53 пунктов')),
+        kpi(photoPct != null ? photoPct + '%' : '—', t('Находки с фотодоказательством'), t('доказательная база')),
+        kpi(digPct != null ? digPct + '%' : '—', t('Цифровая сдача в управление'), t('безбумажный оборот')))),
+
+    el('div', { cls: 'card' },
+      el('h3', {}, t('Всего')),
       el('div', { cls: 'row wrap' },
-        el('span', { cls: 'pill pmut' }, 'инспекций: ' + all.length),
-        el('span', { cls: 'pill pmut' }, 'завершено: ' + all.filter(i => i.status === 'completed').length),
+        el('span', { cls: 'pill pmut' }, t('инспекций: ') + all.length),
+        el('span', { cls: 'pill pmut' }, t('завершено: ') + all.filter(i => i.status === 'completed').length),
         el('span', { cls: 'pill cat1' }, 'кат. 1: ' + f1),
         el('span', { cls: 'pill cat2' }, 'кат. 2: ' + f2),
         el('span', { cls: 'pill cat3' }, 'кат. 3: ' + f3)),
       el('div', { cls: 'sm sp', style: 'margin-top:9px' },
-        `Среднее число находок на инспекцию (SAFA ratio): ${ratio}`),
-      grounded ? el('div', { cls: 'sm' }, `ВС запрещено к полёту (3c): ${grounded}`) : null),
+        t('Среднее число находок на инспекцию (SAFA ratio): ') + ratio),
+      grounded ? el('div', { cls: 'sm' }, t('ВС запрещено к полёту (3c): ') + grounded) : null),
 
     el('div', { cls: 'card' },
-      el('h3', {}, 'По типам инспекций'),
+      el('h3', {}, t('По типам инспекций')),
       ...Object.entries(byType).map(([k, v]) => el('div', { cls: 'row sp' },
-        el('span', { cls: 'pill pmut' }, k), el('span', { cls: 'sm grow' }, TYPES[k].ru), el('b', {}, v)))),
+        el('span', { cls: 'pill pmut' }, k), el('span', { cls: 'sm grow' }, L(TYPES[k])), el('b', {}, v)))),
 
     top.length ? el('div', { cls: 'card' },
-      el('h3', {}, 'Наиболее частые пункты с находками'),
+      el('h3', {}, t('Наиболее частые пункты с находками')),
       ...top.map(([id, n]) => el('div', { cls: 'row sp' },
         el('span', { cls: 'pill pmut' }, id),
-        el('span', { cls: 'sm grow' }, ITEM_BY_ID[id] ? ITEM_BY_ID[id].ru : id),
+        el('span', { cls: 'sm grow' }, ITEM_BY_ID[id] ? L(ITEM_BY_ID[id]) : id),
         el('b', {}, n)))) : null,
 
     Object.keys(byOp).length ? el('div', { cls: 'card' },
-      el('h3', {}, 'По эксплуатантам'),
+      el('h3', {}, t('По эксплуатантам')),
       ...Object.entries(byOp).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
         el('div', { cls: 'row sp' }, el('span', { cls: 'sm grow' }, k), el('b', {}, v)))) : null,
   ]);
@@ -1305,7 +1358,7 @@ async function scrStats() {
 /* ══════════════ экран: настройки ══════════════ */
 
 async function scrSet() {
-  setHeader('Настройки', null);
+  setHeader(t('Настройки'), null);
   const all = await DB.all();
   const pend = all.filter(i => i.status === 'completed' && i.sync.state !== 'sent').length;
   const f = (key, lab, ph) => el('label', { cls: 'f' }, el('span', {}, lab),
@@ -1313,41 +1366,50 @@ async function scrSet() {
 
   render([
     el('div', { cls: 'card' },
-      el('h3', {}, 'Инспектор'),
-      f('inspector', 'Ф.И.О. инспектора'),
-      f('inspPost', 'Должность'),
-      f('airport', 'Аэропорт по умолчанию', 'напр. UTDD')),
+      el('h3', {}, t('Язык интерфейса')),
+      el('div', { cls: 'row', style: 'gap:8px' },
+        ...[['ru', 'Русский'], ['en', 'English']].map(([code, name]) =>
+          el('button', {
+            cls: 'btn ' + (CFG.d.lang === code ? '' : 'sec'), style: 'flex:1',
+            onclick: () => setLang(code)
+          }, name)))),
 
     el('div', { cls: 'card' },
-      el('h3', {}, 'Полномочный орган'),
-      el('label', { cls: 'f' }, el('span', {}, 'Наименование в шапке акта'),
+      el('h3', {}, t('Инспектор')),
+      f('inspector', t('Ф.И.О. инспектора')),
+      f('inspPost', t('Должность')),
+      f('airport', t('Аэропорт по умолчанию'), t('напр. UTDD'))),
+
+    el('div', { cls: 'card' },
+      el('h3', {}, t('Полномочный орган')),
+      el('label', { cls: 'f' }, el('span', {}, t('Наименование в шапке акта')),
         el('textarea', { oninput: e => { CFG.d.authority = e.target.value; CFG.save(); } }, CFG.d.authority))),
 
     el('div', { cls: 'card' },
-      el('h3', {}, 'Синхронизация'),
-      f('gasUrl', 'Адрес веб-приложения Google Apps Script', 'https://script.google.com/macros/s/…/exec'),
-      el('div', { cls: 'xs mut' }, `Завершённых и неотправленных инспекций: ${pend}`),
-      el('button', { cls: 'btn wide sp', onclick: syncAll }, '☁ Отправить все завершённые'),
+      el('h3', {}, t('Синхронизация')),
+      f('gasUrl', t('Адрес веб-приложения Google Apps Script'), 'https://script.google.com/macros/s/…/exec'),
+      el('div', { cls: 'xs mut' }, t('Завершённых и неотправленных инспекций: ') + pend),
+      el('button', { cls: 'btn wide sp', onclick: syncAll }, t('☁ Отправить все завершённые')),
       el('div', { cls: 'xs mut sp' },
-        'Развёртывание бэкенда — файл gas/Code.gs в папке проекта (README, раздел «Синхронизация»).')),
+        t('Развёртывание бэкенда — файл gas/Code.gs в папке проекта (README, раздел «Синхронизация»).'))),
 
     el('div', { cls: 'card' },
-      el('h3', {}, 'Офлайн-готовность'),
+      el('h3', {}, t('Офлайн-готовность')),
       el('div', { cls: 'xs mut', style: 'margin-bottom:8px' },
-        `Справочных изображений: ${REF_PHOTOS.length}. На перроне связи нет — они должны лежать в устройстве.`),
-      el('div', { id: 'offlineState', cls: 'sm mut' }, 'Проверка…'),
-      el('button', { cls: 'btn wide sp', onclick: cachePhotosNow }, '⬇ Загрузить примеры в устройство')),
+        t('Справочных изображений: ') + REF_PHOTOS.length + t('. На перроне связи нет — они должны лежать в устройстве.')),
+      el('div', { id: 'offlineState', cls: 'sm mut' }, t('Проверка…')),
+      el('button', { cls: 'btn wide sp', onclick: cachePhotosNow }, t('⬇ Загрузить примеры в устройство'))),
 
     el('div', { cls: 'card' },
-      el('h3', {}, 'Данные'),
-      el('button', { cls: 'btn sec wide', onclick: exportAll }, '⬇ Выгрузить все инспекции (JSON)'),
-      el('button', { cls: 'btn sec wide sp', onclick: () => location.reload(true) }, '↻ Обновить приложение')),
+      el('h3', {}, t('Данные')),
+      el('button', { cls: 'btn sec wide', onclick: exportAll }, t('⬇ Выгрузить все инспекции (JSON)')),
+      el('button', { cls: 'btn sec wide sp', onclick: () => location.reload(true) }, t('↻ Обновить приложение'))),
 
     el('div', { cls: 'card xs mut' },
       el('div', {}, 'SAFA Inspector v' + APP_VER),
-      el('div', { cls: 'sp' }, `База предописанных находок: ${PDF.length} формулировок, ${ITEMS.length} пунктов.`),
-      el('div', {}, 'Источник: EASA Ramp Inspection Manual, Appendix 1 — Inspection instructions and pre-described findings, Issue 6 (INST.RI.01/006, 28.10.2022).'),
-      el('div', { cls: 'sp' }, 'Категорирование и классы мер — по RIM и бланку PI АГА РТ.')),
+      el('div', { cls: 'sp' }, t('База предописанных находок: ') + PDF.length + t(' формулировок, ') + ITEMS.length + t(' пунктов.')),
+      el('div', {}, t('Источник: EASA Ramp Inspection Manual, Appendix 1 — Inspection instructions and pre-described findings, Issue 6 (INST.RI.01/006, 28.10.2022).')),
+      el('div', { cls: 'sp' }, t('Категорирование и классы мер — по RIM и бланку PI АГА РТ.'))),
   ]);
   offlineStatus();
 }
@@ -1357,20 +1419,20 @@ async function offlineStatus() {
   const box = $('#offlineState');
   if (!box) return;
   if (!('caches' in window) || !REF_PHOTOS.length) {
-    box.textContent = REF_PHOTOS.length ? 'Кэш недоступен в этом браузере.' : 'Изображений нет.';
+    box.textContent = REF_PHOTOS.length ? t('Кэш недоступен в этом браузере.') : t('Изображений нет.');
     return;
   }
   const keys = await caches.keys();
   const c = keys.length ? await caches.open(keys[0]) : null;
-  if (!c) { box.textContent = 'Кэш пуст — нажмите «Загрузить примеры».'; return; }
+  if (!c) { box.textContent = t('Кэш пуст — нажмите «Загрузить примеры».'); return; }
   let have = 0;
   for (const p of REF_PHOTOS) if (await c.match('./' + p.file)) have++;
   box.innerHTML = '';
   box.append(
     el('div', { cls: 'bar' }, el('i', { style: `width:${have / REF_PHOTOS.length * 100}%` })),
     el('div', { cls: 'xs sp' }, have === REF_PHOTOS.length
-      ? `✓ Все ${have} изображений в устройстве — офлайн готов.`
-      : `В устройстве ${have} из ${REF_PHOTOS.length}. Загрузите остальные по Wi-Fi.`));
+      ? t('✓ Все ') + have + t(' изображений в устройстве — офлайн готов.')
+      : t('В устройстве ') + have + ' ' + t('из') + ' ' + REF_PHOTOS.length + t('. Загрузите остальные по Wi-Fi.')));
 }
 
 async function cachePhotosNow() {
@@ -1380,7 +1442,7 @@ async function cachePhotosNow() {
   toast('Загрузка примеров…');
   const r = await Promise.allSettled(REF_PHOTOS.map(p => c.add('./' + p.file)));
   const bad = r.filter(x => x.status === 'rejected').length;
-  toast(bad ? `Загружено с ошибками: не удалось ${bad}` : 'Примеры загружены в устройство');
+  toast(bad ? t('Загружено с ошибками: не удалось ') + bad : t('Примеры загружены в устройство'));
   offlineStatus();
 }
 
@@ -1472,6 +1534,8 @@ async function seedDemo(force) {
 /* ══════════════ старт ══════════════ */
 
 (async function boot() {
+  document.documentElement.lang = CFG.d.lang;
+  applyNav();
   document.querySelector('nav.tabs button').classList.add('on');
   // ?demo=1 — принудительно вернуть учебный пример (для показа)
   const force = /[?&]demo=1/.test(location.search);
