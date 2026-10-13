@@ -10,7 +10,7 @@ function t(s) { return CFG.d.lang === 'en' && I18N[s] ? I18N[s] : s; }
 // перевод поля структуры данных {ru,en}: при en берём en, если он есть
 const L = o => (o && CFG.d.lang === 'en' && o.en) ? o.en : (o ? o.ru : '');
 
-const APP_VER = '1.7.0';
+const APP_VER = '1.7.1';
 
 /* ══════════════ справочные константы ══════════════ */
 
@@ -82,11 +82,11 @@ const DB = (() => {
     });
   }
   const tx = (store, mode, fn) => open().then(d => new Promise((res, rej) => {
-    const t = d.transaction(store, mode), s = t.objectStore(store);
+    const trn = d.transaction(store, mode), s = trn.objectStore(store);
     let out; const q = fn(s);
     if (q) q.onsuccess = e => { out = e.target.result; };
-    t.oncomplete = () => res(out);
-    t.onerror = () => rej(t.error);
+    trn.oncomplete = () => res(out);
+    trn.onerror = () => rej(trn.error);
   }));
 
   return {
@@ -123,8 +123,8 @@ CFG.load();
 /* ══════════════ утилиты ══════════════ */
 
 const $ = s => document.querySelector(s);
-const el = (t, a = {}, ...kids) => {
-  const n = document.createElement(t);
+const el = (tag, a = {}, ...kids) => {
+  const n = document.createElement(tag);
   for (const k in a) {
     if (k === 'cls') n.className = a[k];
     else if (k === 'html') n.innerHTML = a[k];
@@ -145,10 +145,10 @@ const fmtDate = s => s ? s.split('-').reverse().join('.') : '';
 let toastT;
 function toast(msg) {
   clearTimeout(toastT);
-  let t = $('.toast');
-  if (!t) { t = el('div', { cls: 'toast' }); document.body.append(t); }
-  t.textContent = msg;
-  toastT = setTimeout(() => t.remove(), 2600);
+  let box = $('.toast');
+  if (!box) { box = el('div', { cls: 'toast' }); document.body.append(box); }
+  box.textContent = msg;
+  toastT = setTimeout(() => box.remove(), 2600);
 }
 
 function sheet(title, build) {
@@ -355,7 +355,7 @@ function scrInsp() {
 
 function inspMenu(ins) {
   sheet('Инспекция', (box, close) => {
-    const act = (t, fn, cls) => box.append(el('button', { cls: 'btn ' + (cls || 'sec') + ' wide', style: 'margin-bottom:8px', onclick: fn }, t));
+    const act = (lbl, fn, cls) => box.append(el('button', { cls: 'btn ' + (cls || 'sec') + ' wide', style: 'margin-bottom:8px', onclick: fn }, lbl));
     act(ins.status === 'completed' ? t('Вернуть в работу') : t('Отметить завершённой'), async () => {
       ins.status = ins.status === 'completed' ? 'draft' : 'completed';
       await save(ins); close(); scrInsp();
@@ -384,11 +384,11 @@ function scrGeneral() {
     }, opts.tag === 'textarea' ? g[key] : null));
 
   const kind = el('div', { cls: 'row', style: 'gap:8px' },
-    ...[['pax', t('Пассажирский')], ['cargo', t('Грузовой')], ['mixed', t('Смешанный')]].map(([k, t]) =>
+    ...[['pax', t('Пассажирский')], ['cargo', t('Грузовой')], ['mixed', t('Смешанный')]].map(([k, lbl]) =>
       el('button', {
         cls: 'btn ' + (g.kind === k ? '' : 'sec'), style: 'flex:1;font-size:14px;padding:0 6px',
         onclick: e => { g.kind = k; save(ins); scrGeneral(); }
-      }, t)));
+      }, lbl)));
 
   render([
     el('div', { cls: 'card' },
@@ -737,11 +737,11 @@ function addToLibrary(f, blob) {
     const vBox = el('div', { cls: 'row', style: 'gap:8px' });
     const drawV = () => {
       vBox.innerHTML = '';
-      [['bad', t('Как плохо (несоответствие)')], ['good', t('Как хорошо (норма)')]].forEach(([k, t]) =>
+      [['bad', t('Как плохо (несоответствие)')], ['good', t('Как хорошо (норма)')]].forEach(([k, lbl]) =>
         vBox.append(el('button', {
           cls: 'btn ' + (rec.verdict === k ? '' : 'sec'), style: 'flex:1;font-size:13px',
           onclick: () => { rec.verdict = k; drawV(); }
-        }, t)));
+        }, lbl)));
     };
     drawV();
     box.append(
@@ -840,11 +840,11 @@ async function scrGallery() {
   const real = await privTiles(priv.filter(() => !galState.v || galState.v === 'bad'));
 
   const filters = el('div', { cls: 'row', style: 'gap:6px' },
-    ...[['', t('Все')], ['bad', t('Как плохо')], ['good', t('Как хорошо')], ['scheme', t('Схемы')]].map(([k, t]) =>
+    ...[['', t('Все')], ['bad', t('Как плохо')], ['good', t('Как хорошо')], ['scheme', t('Схемы')]].map(([k, lbl]) =>
       el('button', {
         cls: 'btn ' + (galState.v === k ? '' : 'sec'), style: 'flex:1;min-height:40px;font-size:13px',
         onclick: () => { galState.v = k; scrGallery(); }
-      }, t)));
+      }, lbl)));
 
   const sel = el('select', { onchange: e => { galState.item = e.target.value; scrGallery(); } },
     el('option', { value: '' }, t('Все пункты')),
@@ -964,7 +964,7 @@ function sigCard(key, title, who) {
     g.scale(2, 2); g.lineWidth = 2; g.lineCap = 'round'; g.strokeStyle = '#12212f';
     if (ins.sig[key]) { const i = new Image(); i.onload = () => g.drawImage(i, 0, 0, r.width, r.height); i.src = ins.sig[key]; }
     let drawing = false;
-    const pos = e => { const b = c.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return [t.clientX - b.left, t.clientY - b.top]; };
+    const pos = e => { const b = c.getBoundingClientRect(); const pt = e.touches ? e.touches[0] : e; return [pt.clientX - b.left, pt.clientY - b.top]; };
     const start = e => { e.preventDefault(); drawing = true; g.beginPath(); g.moveTo(...pos(e)); };
     const move = e => { if (!drawing) return; e.preventDefault(); g.lineTo(...pos(e)); g.stroke(); };
     const end = () => drawing = false;
@@ -1133,11 +1133,11 @@ function scrRef() {
 
 function refHubStrip() {
   return el('div', { cls: 'row', style: 'gap:6px;margin-bottom:10px' },
-    ...[['pdf', t('Формулировки')], ['gal', t('Примеры')]].map(([k, t]) =>
+    ...[['pdf', t('Формулировки')], ['gal', t('Примеры')]].map(([k, lbl]) =>
       el('button', {
         cls: 'btn ' + (refState.tab === k ? '' : 'sec'), style: 'flex:1;min-height:42px',
         onclick: () => { refState.tab = k; scrRef(); }
-      }, t)));
+      }, lbl)));
 }
 
 function scrRefFindings() {
@@ -1159,12 +1159,12 @@ function scrRefFindings() {
     }, k === '' ? t('Все') : (k === 'G' ? 'G' : 'Кат. ' + k))));
 
   function draw() {
-    const t = refState.q.trim().toLowerCase();
+    const needle = refState.q.trim().toLowerCase();
     const list = PDF.filter(f =>
       (!refState.item || f.item === refState.item) &&
       (!refState.cat || String(f.cat) === refState.cat) &&
-      (!t || f.text.toLowerCase().includes(t) || f.code.toLowerCase().includes(t)
-          || (f.refs || '').toLowerCase().includes(t)));
+      (!needle || f.text.toLowerCase().includes(needle) || f.code.toLowerCase().includes(needle)
+          || (f.refs || '').toLowerCase().includes(needle)));
     out.innerHTML = '';
     out.append(el('div', { cls: 'xs mut', style: 'margin:8px 0' }, t('Найдено: ') + list.length + ' ' + t('из') + ' ' + PDF.length));
     list.slice(0, 300).forEach(f => out.append(el('div', { cls: 'card' },
@@ -1723,6 +1723,7 @@ async function seedDemo(force) {
 
 (async function boot() {
   document.documentElement.lang = CFG.d.lang;
+  $('#ver').textContent = 'v' + APP_VER;        // номер версии всегда на виду, в шапке
   applyNav();
   document.querySelector('nav.tabs button').classList.add('on');
   try { await gate(); } catch (e) { ACCESS = 'open'; }   // сбой проверки не должен запирать инспектора

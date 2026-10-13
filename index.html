@@ -30,6 +30,7 @@ header{position:sticky;top:0;z-index:20;background:var(--acc2);color:#fff;
   padding:calc(10px + env(safe-area-inset-top)) 12px 10px;display:flex;align-items:center;gap:10px;
   box-shadow:0 2px 10px rgba(0,0,0,.35)}
 header .ttl{font-weight:600;font-size:17px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header .ver{font-size:11px;opacity:.65;white-space:nowrap}
 header button{background:rgba(255,255,255,.14);border:0;color:#fff;border-radius:10px;
   min-width:40px;height:40px;padding:0 10px;font-size:15px}
 main{padding:12px;max-width:900px;margin:0 auto}
@@ -169,6 +170,7 @@ ul.hint li{margin-bottom:5px}
 <header>
   <button id="back" hidden>‹</button>
   <div class="ttl" id="title">SAFA Inspector</div>
+  <span class="ver" id="ver"></span>
   <button id="hdrAct" hidden></button>
 </header>
 
