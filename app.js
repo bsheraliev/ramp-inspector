@@ -10,7 +10,7 @@ function t(s) { return CFG.d.lang === 'en' && I18N[s] ? I18N[s] : s; }
 // перевод поля структуры данных {ru,en}: при en берём en, если он есть
 const L = o => (o && CFG.d.lang === 'en' && o.en) ? o.en : (o ? o.ru : '');
 
-const APP_VER = '1.7.1';
+const APP_VER = '1.7.2';
 
 /* ══════════════ справочные константы ══════════════ */
 
@@ -110,6 +110,9 @@ const DB = (() => {
 const REF_PHOTOS = (window.SAFA_REF_PHOTOS || []).filter(p => p && p.file);
 // Подсказки «что проверять» и отметка приоритетных пунктов (data/hints.js)
 const HINTS = window.SAFA_HINTS || {};
+// Проводник инспектора — guide.html на этом же сайте, собирается scripts/build-guide.py
+const guideLink = (cls, hash) => el('a', { cls, href: 'guide.html' + (hash || '') },
+  '📘 ' + t('Проводник: как провести инспекцию'));
 const isHP = id => !!(HINTS[id] && HINTS[id].hp);
 
 const CFG = {
@@ -263,7 +266,8 @@ async function scrList() {
     return render(el('div', { cls: 'empty' },
       el('div', { cls: 'b', style: 'font-size:19px;margin-bottom:6px' }, t('Инспекций пока нет')),
       el('div', { cls: 'sm' }, t('Нажмите «+» вверху, чтобы начать проверку воздушного судна.')),
-      el('button', { cls: 'btn sp', onclick: pickType }, t('Новая инспекция'))));
+      el('button', { cls: 'btn sp', onclick: pickType }, t('Новая инспекция')),
+      el('div', { cls: 'sp' }, guideLink('glink', '#ramp'))));
   }
   const nodes = all.map(ins => {
     const done = progress(ins), mc = maxCat(ins);
@@ -1433,6 +1437,11 @@ async function scrSet() {
       el('button', { cls: 'btn wide sp', onclick: cachePhotosNow }, t('⬇ Загрузить примеры в устройство'))),
 
     el('div', { cls: 'card' },
+      el('h3', {}, t('Помощь')),
+      el('div', { cls: 'xs mut', style: 'margin-bottom:8px' }, t('Пошаговая инструкция с экранами приложения. Открывается без связи.')),
+      guideLink('btn sec wide')),
+
+    el('div', { cls: 'card' },
       el('h3', {}, t('Данные')),
       el('button', { cls: 'btn sec wide', onclick: exportAll }, t('⬇ Выгрузить все инспекции (JSON)')),
       el('button', { cls: 'btn sec wide sp', onclick: () => location.reload(true) }, t('↻ Обновить приложение'))),
@@ -1596,6 +1605,7 @@ function lockScreen(pack) {
       DEMO_DOOR ? el('button', {
         cls: 'lock-demo', onclick: () => { localStorage.safaMode = 'demo'; done('demo'); }
       }, t('Демо без пароля')) : null,
+      el('div', {}, guideLink('lock-demo', '#ramp')),
       el('div', { cls: 'xs mut', style: 'margin-top:14px' }, 'v' + APP_VER)));
     document.body.append(wrap);
     inp.focus();

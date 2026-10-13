@@ -94,7 +94,7 @@ window.SAFA_SMOKE = async function () {
     TR = null;
 
     await step(P + 'сводка', async () => { await scrStats(); }, { has: () => view().querySelectorAll('.kpi').length === 4 });
-    await step(P + 'настройки', async () => { await scrSet(); }, { wait: 400 });
+    await step(P + 'настройки', async () => { await scrSet(); }, { wait: 400, has: () => !!view().querySelector('a[href^="guide.html"]') });
   }
 
   // возврат в исходное состояние не должен ронять саму проверку
