@@ -1,6 +1,6 @@
 /* SAFA Inspector — service worker.
    ВАЖНО: при любой правке index.html / app.js / data/* поднимать CACHE. */
-const CACHE = 'safa-inspector-v1.6.0';
+const CACHE = 'safa-inspector-v1.7.0';
 
 const ASSETS = [
   './',
@@ -31,6 +31,8 @@ self.addEventListener('install', e => {
     const c = await caches.open(CACHE);
     await c.addAll(ASSETS);
     self.skipWaiting();
+    // закрытый набор примеров: зашифрован, может отсутствовать — установку не валит
+    await c.add('./data/private.enc').catch(() => {});
     await cachePhotos(c);
   })());
 });
