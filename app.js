@@ -10,7 +10,7 @@ function t(s) { return CFG.d.lang === 'en' && I18N[s] ? I18N[s] : s; }
 // перевод поля структуры данных {ru,en}: при en берём en, если он есть
 const L = o => (o && CFG.d.lang === 'en' && o.en) ? o.en : (o ? o.ru : '');
 
-const APP_VER = '1.5.0';
+const APP_VER = '1.6.0';
 
 /* ══════════════ справочные константы ══════════════ */
 
@@ -107,6 +107,9 @@ const DB = (() => {
 
 // Справочные изображения из руководств (data/photos.js). Свои примеры — в хранилище lib.
 const REF_PHOTOS = (window.SAFA_REF_PHOTOS || []).filter(p => p && p.file);
+// Подсказки «что проверять» и отметка приоритетных пунктов (data/hints.js)
+const HINTS = window.SAFA_HINTS || {};
+const isHP = id => !!(HINTS[id] && HINTS[id].hp);
 
 const CFG = {
   d: { inspector: '', inspPost: '', authority: 'Агентство гражданской авиации при Правительстве Республики Таджикистан',
@@ -443,7 +446,8 @@ function scrChecklist() {
     el('b', {}, '✓'), ' ' + t('соответствует · '),
     el('b', {}, 'N'), ' ' + t('не применимо · '),
     el('b', {}, '!'), ' ' + t('несоответствие (откроется выбор находки). '),
-    t('Нажатие на название пункта открывает примечание и находки.')));
+    t('Нажатие на название пункта открывает примечание и находки.'),
+    ' ', el('b', { cls: 'hpm' }, '★'), ' ' + t('— приоритетный пункт.')));
 
   SECTIONS.forEach(sec => {
     const list = ITEMS.filter(i => i.sec === sec.id);
@@ -469,7 +473,8 @@ function scrChecklist() {
           }, ic)));
       nodes.push(el('div', { cls: 'item' + (nf ? ' hasf' : '') },
         el('button', { cls: 'lab', onclick: () => scrItem(it.id) },
-          el('div', { cls: 'id' }, it.id + (nf ? ' · ' + t('находок: ') + nf : '') + (st.rmk ? t(' · есть примечание') : '')),
+          el('div', { cls: 'id' }, it.id, isHP(it.id) ? el('span', { cls: 'hpm' }, ' ★') : null,
+            (nf ? ' · ' + t('находок: ') + nf : '') + (st.rmk ? t(' · есть примечание') : '')),
           el('div', { cls: 'nm' }, L(it))),
         sw));
     });
@@ -477,6 +482,20 @@ function scrChecklist() {
 
   nodes.push(el('button', { cls: 'btn wide sp', onclick: scrInsp }, t('Готово')));
   render(nodes);
+}
+
+// Подсказка инспектору: что смотреть по пункту и на чём обычно ошибаются
+function hintCard(id) {
+  const h = HINTS[id];
+  if (!h) return null;
+  const en = CFG.d.lang === 'en';
+  const list = (en ? h.en : h.ru) || [], note = en ? h.nen : h.nru;
+  return el('div', { cls: 'card' },
+    el('h3', {}, t('Что проверять')),
+    el('ul', { cls: 'hint' }, ...list.map(x => el('li', {}, x))),
+    note ? el('div', { cls: 'hint-n' }, el('b', {}, t('Важно: ')), note) : null,
+    el('div', { cls: 'xs mut', style: 'margin-top:8px' },
+      t('По материалам курса GCAA «SAFA Awareness». Категорию находки определяйте по базе предописанных находок.')));
 }
 
 function scrItem(id) {
@@ -487,12 +506,15 @@ function scrItem(id) {
   render([
     el('div', { cls: 'card' },
       el('div', { cls: 'row' }, el('span', { cls: 'pill pmut' }, id),
+        isHP(id) ? el('span', { cls: 'pill hp' }, '★ ' + t('приоритет')) : null,
         el('span', { cls: 'right xs mut' }, t('предописанных находок: ') + it.n)),
       el('h3', { style: 'margin-top:8px' }, L(it)),
-      el('div', { cls: 'sm mut' }, it.en)),
+      el('div', { cls: 'sm mut' }, CFG.d.lang === 'en' ? it.ru : it.en)),
+
+    hintCard(id),
 
     el('div', { cls: 'card' },
-      el('h3', {}, 'Статус пункта'),
+      el('h3', {}, t('Статус пункта')),
       el('div', { cls: 'row wrap' }, ...Object.entries(ST).map(([k, v]) =>
         el('button', {
           cls: 'btn ' + (st.s === k ? '' : 'sec'), style: 'flex:1;font-size:13px;padding:0 8px',
