@@ -1,10 +1,11 @@
 /* SAFA Inspector — service worker.
    ВАЖНО: при любой правке index.html / app.js / data/* поднимать CACHE. */
-const CACHE = 'safa-inspector-v1.7.1';
+const CACHE = 'safa-inspector-v1.7.2';
 
 const ASSETS = [
   './',
   './index.html',
+  './guide.html',
   './app.js',
   './data/checklist.js',
   './data/findings.js',

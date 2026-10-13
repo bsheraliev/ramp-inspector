@@ -323,4 +323,7 @@ window.SAFA_I18N = {
   "Войти по паролю": "Sign in with password",
   "Реальные находки": "Real findings",
   "Реальные находки из базы SAFA доступны после входа по паролю (Настройки → Доступ).": "Real SAFA database findings are available after signing in (Settings → Access).",
+  "Проводник: как провести инспекцию": "Guide: how to run an inspection (in Russian)",
+  "Помощь": "Help",
+  "Пошаговая инструкция с экранами приложения. Открывается без связи.": "A step-by-step guide with app screens. Works offline.",
 };
