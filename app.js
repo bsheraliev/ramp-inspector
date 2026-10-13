@@ -10,7 +10,7 @@ function t(s) { return CFG.d.lang === 'en' && I18N[s] ? I18N[s] : s; }
 // перевод поля структуры данных {ru,en}: при en берём en, если он есть
 const L = o => (o && CFG.d.lang === 'en' && o.en) ? o.en : (o ? o.ru : '');
 
-const APP_VER = '1.6.0';
+const APP_VER = '1.7.0';
 
 /* ══════════════ справочные константы ══════════════ */
 
@@ -99,6 +99,7 @@ const DB = (() => {
     photoDel: id => tx('photos', 'readwrite', s => s.delete(id)),
     kvGet: k => tx('kv', 'readonly', s => s.get(k)).then(r => r && r.v),
     kvPut: (k, v) => tx('kv', 'readwrite', s => s.put({ k, v })),
+    kvDel: k => tx('kv', 'readwrite', s => s.delete(k)),
     libAll: () => tx('lib', 'readonly',  s => s.getAll()),
     libPut: o => tx('lib', 'readwrite', s => s.put(o)),
     libDel: id => tx('lib', 'readwrite', s => s.delete(id)),
@@ -541,17 +542,18 @@ function scrItem(id) {
   ]);
 
   // примеры подгружаются отдельно: чтение блобов не должно тормозить экран
-  examplesFor(id).then(async ({ own, ref }) => {
+  examplesFor(id).then(async ({ own, ref, priv, total }) => {
     const box = $('#exBox');
     if (!box) return;
     box.innerHTML = '';
-    box.append(el('h3', {}, t('Примеры по пункту') + ' (' + (own.length + ref.length) + ')'));
-    if (!own.length && !ref.length) {
+    box.append(el('h3', {}, t('Примеры по пункту') + ' (' + total + ')'));
+    if (!total) {
       box.append(el('div', { cls: 'sm mut' },
         t('Для этого пункта примеров ещё нет. Сфотографируйте несоответствие в находке и нажмите ★ на снимке.')));
       return;
     }
     const tiles = [
+      ...await privTiles(priv),
       ...await ownTiles(own, () => scrItem(id)),
       ...ref.map(r => galleryTile({
         src: r.file, verdict: r.verdict, kind: r.kind, title: r.title_ru,
@@ -767,7 +769,8 @@ function addToLibrary(f, blob) {
 async function examplesFor(itemId) {
   const own = (await DB.libAll()).filter(r => !itemId || r.item === itemId);
   const ref = REF_PHOTOS.filter(r => !itemId || r.item === itemId);
-  return { own, ref, total: own.length + ref.length };
+  const priv = PRIV.filter(r => !itemId || r.item === itemId);
+  return { own, ref, priv, total: own.length + ref.length + priv.length };
 }
 
 function galleryTile(o) {
@@ -778,6 +781,7 @@ function galleryTile(o) {
     el('img', { src: o.src, loading: 'lazy', alt: o.title || '' }),
     el('figcaption', {},
       el('span', { cls: 'v ' + vc }, vt),
+      o.cat != null ? el('span', { cls: 'v pc' + o.cat }, o.cat === 'G' ? 'G' : t('кат. ') + o.cat) : null,
       el('div', { cls: 'b', style: 'font-size:12px' }, o.title || '—'),
       o.item ? el('div', { cls: 'xs mut' }, o.item) : null));
 }
@@ -824,7 +828,7 @@ let galState = { item: '', v: '' };
 
 async function scrGallery() {
   setHeader(t('Примеры: как хорошо, как плохо'), null);
-  const { own, ref } = await examplesFor(galState.item || '');
+  const { own, ref, priv } = await examplesFor(galState.item || '');
   const pass = o => !galState.v || (galState.v === 'scheme' ? o.kind === 'scheme'
     : (o.kind !== 'scheme' && o.verdict === galState.v));
 
@@ -833,6 +837,7 @@ async function scrGallery() {
     note: r.caption_ru, item: r.item, source: r.source,
   }));
   const mine = await ownTiles(own.filter(pass), scrGallery);
+  const real = await privTiles(priv.filter(() => !galState.v || galState.v === 'bad'));
 
   const filters = el('div', { cls: 'row', style: 'gap:6px' },
     ...[['', t('Все')], ['bad', t('Как плохо')], ['good', t('Как хорошо')], ['scheme', t('Схемы')]].map(([k, t]) =>
@@ -852,11 +857,14 @@ async function scrGallery() {
         t('Свои примеры добавляются прямо с инспекции: в находке нажмите ★ на снимке. ') +
         t('Библиотека растёт от выезда к выезду и работает офлайн.')),
       filters, el('div', { cls: 'sp' }, sel)),
+    ACCESS === 'demo' ? el('div', { cls: 'card xs mut' }, t('Реальные находки из базы SAFA доступны после входа по паролю (Настройки → Доступ).')) : null,
+    real.length ? el('div', { cls: 'sec-h' }, t('Реальные находки') + ' (' + real.length + ')') : null,
+    real.length ? el('div', { cls: 'gal' }, ...real) : null,
     mine.length ? el('div', { cls: 'sec-h' }, t('Свои примеры') + ' (' + mine.length + ')') : null,
     mine.length ? el('div', { cls: 'gal' }, ...mine) : null,
     refTiles.length ? el('div', { cls: 'sec-h' }, t('Из руководств') + ' (' + refTiles.length + ')') : null,
     refTiles.length ? el('div', { cls: 'gal' }, ...refTiles) : null,
-    (!mine.length && !refTiles.length) ? el('div', { cls: 'empty' },
+    (!mine.length && !refTiles.length && !real.length) ? el('div', { cls: 'empty' },
       el('div', { cls: 'b' }, t('Примеров пока нет')),
       el('div', { cls: 'sm sp' }, t('Сфотографируйте несоответствие на инспекции и нажмите ★ на снимке — он попадёт сюда.'))) : null,
   ]);
@@ -1387,6 +1395,8 @@ async function scrSet() {
     el('input', { value: CFG.d[key], placeholder: ph || '', oninput: e => { CFG.d[key] = e.target.value; CFG.save(); } }));
 
   render([
+    accessCard(),
+
     el('div', { cls: 'card' },
       el('h3', {}, t('Язык интерфейса')),
       el('div', { cls: 'row', style: 'gap:8px' },
@@ -1475,6 +1485,162 @@ async function exportAll() {
   document.body.append(a); a.click(); a.remove();
 }
 
+/* ══════════════ вход по паролю и закрытый набор примеров ══════════════
+   Сайт статический, репозиторий открытый: окно с паролем само по себе файлы не
+   защищает. Поэтому реальные находки лежат в data/private.enc в зашифрованном виде
+   (AES-256-GCM, ключ из пароля через PBKDF2), а пароль их расшифровывает на устройстве.
+   Проверка пароля = удачная расшифровка; сам пароль нигде не хранится.
+   Нет файла набора — нет и замка: приложение работает как раньше. */
+
+const PACK_URL = 'data/private.enc';
+const DEMO_DOOR = true;      // ссылка «Демо без пароля» на экране входа (для показа продукта)
+let PRIV = [];               // оглавление расшифрованного набора
+let PRIV_META = null;        // {build, title, source, tag, salt}
+let ACCESS = 'open';         // open — набора нет · full — вошёл по паролю · demo — без пароля
+
+const hex = u8 => [...u8].map(b => b.toString(16).padStart(2, '0')).join('');
+
+async function fetchPack() {
+  try {
+    const r = await fetch(PACK_URL, { cache: 'no-cache' });
+    if (!r.ok) return null;
+    const buf = new Uint8Array(await r.arrayBuffer());
+    // офлайн сервис-воркер может подсунуть index.html — отличаем по сигнатуре
+    if (buf.length < 52 || String.fromCharCode(buf[0], buf[1], buf[2], buf[3]) !== 'SIP1') return null;
+    return {
+      iter: new DataView(buf.buffer).getUint32(4), salt: buf.subarray(8, 24),
+      iv: buf.subarray(24, 36), ct: buf.subarray(36),
+      tag: hex(buf.subarray(24, 36)),          // iv свой у каждой сборки — её отпечаток
+    };
+  } catch (e) { return null; }
+}
+
+async function packKey(password, pack) {
+  const raw = new TextEncoder().encode(password.normalize('NFC').trim());
+  const base = await crypto.subtle.importKey('raw', raw, 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: pack.salt, iterations: pack.iter, hash: 'SHA-256' }, base,
+    { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+}
+
+// Расшифровать набор и разложить по хранилищу устройства. Неверный ключ — исключение
+// OperationError до любой записи, так что прежние данные не портятся.
+async function openPack(key, pack) {
+  const plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: pack.iv }, key, pack.ct));
+  const n = new DataView(plain.buffer).getUint32(0);
+  const meta = JSON.parse(new TextDecoder().decode(plain.subarray(4, 4 + n)));
+  const base = 4 + n;
+  for (const o of ((await DB.kvGet('privIndex')) || [])) await DB.photoDel('priv:' + o.id);
+  for (const it of meta.items) {
+    await DB.photoPut('priv:' + it.id,
+      new Blob([plain.subarray(base + it.off, base + it.off + it.len)], { type: 'image/jpeg' }));
+  }
+  PRIV = meta.items.map(({ off, len, ...m }) => m);
+  PRIV_META = { build: meta.build, title: meta.title, source: meta.source, tag: pack.tag, salt: hex(pack.salt) };
+  await DB.kvPut('privIndex', PRIV);
+  await DB.kvPut('privMeta', PRIV_META);
+}
+
+// Выход: убрать с устройства ключ и расшифрованные изображения
+async function lockOut() {
+  for (const o of ((await DB.kvGet('privIndex')) || [])) await DB.photoDel('priv:' + o.id);
+  await DB.kvDel('privKey'); await DB.kvDel('privIndex'); await DB.kvDel('privMeta');
+  PRIV = []; PRIV_META = null; ACCESS = 'open';
+}
+
+async function gate() {
+  const meta = await DB.kvGet('privMeta'), key = await DB.kvGet('privKey');
+  const pack = await fetchPack();
+  if (meta && key) {                               // на этом устройстве уже входили
+    PRIV = (await DB.kvGet('privIndex')) || []; PRIV_META = meta; ACCESS = 'full';
+    if (!pack || pack.tag === meta.tag) return;    // набор тот же либо нет связи
+    if (hex(pack.salt) === meta.salt) {            // вышел новый набор, пароль прежний
+      try { await openPack(key, pack); return; } catch (e) { /* ключ не подошёл */ }
+    }
+    await lockOut();                               // пароль сменили — войти заново
+  }
+  if (!pack) { ACCESS = 'open'; return; }          // набор не опубликован — замка нет
+  if (DEMO_DOOR && (localStorage.safaMode === 'demo' || /[?&]demo=1/.test(location.search))) {
+    ACCESS = 'demo'; return;
+  }
+  await lockScreen(pack);
+}
+
+function lockScreen(pack) {
+  return new Promise(resolve => {
+    const msg = el('div', { cls: 'lock-msg' });
+    const inp = el('input', { type: 'password', autocomplete: 'current-password', placeholder: t('Пароль') });
+    const btn = el('button', { cls: 'btn wide' }, t('Войти'));
+    const done = mode => { ACCESS = mode; wrap.remove(); resolve(); };
+    const go = async () => {
+      if (!inp.value.trim()) return;
+      btn.disabled = true; msg.textContent = t('Проверка…');
+      try {
+        const key = await packKey(inp.value, pack);
+        await openPack(key, pack);
+        await DB.kvPut('privKey', key);            // ключ неизвлекаемый, хранится для обновлений набора
+        localStorage.removeItem('safaMode');
+        done('full');
+      } catch (e) {
+        btn.disabled = false;
+        msg.textContent = e && e.name === 'OperationError' ? t('Неверный пароль') : t('Не удалось войти: ') + (e && e.message || e);
+        inp.select();
+      }
+    };
+    btn.addEventListener('click', go);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+    const wrap = el('div', { cls: 'lock' }, el('div', { cls: 'lock-box' },
+      el('div', { cls: 'lock-t' }, 'SAFA Inspector'),
+      el('div', { cls: 'sm mut', style: 'margin-bottom:14px' }, t('Вход для инспекторов')),
+      inp, el('div', { cls: 'sp' }, btn), msg,
+      DEMO_DOOR ? el('button', {
+        cls: 'lock-demo', onclick: () => { localStorage.safaMode = 'demo'; done('demo'); }
+      }, t('Демо без пароля')) : null,
+      el('div', { cls: 'xs mut', style: 'margin-top:14px' }, 'v' + APP_VER)));
+    document.body.append(wrap);
+    inp.focus();
+  });
+}
+
+// Плитки закрытого набора: изображения читаются из хранилища устройства
+async function privTiles(records) {
+  const en = CFG.d.lang === 'en', out = [];
+  for (const r of records) {
+    const blob = await DB.photoGet('priv:' + r.id);
+    if (!blob) continue;
+    out.push(galleryTile({
+      src: URL.createObjectURL(blob), verdict: 'bad', kind: 'photo', cat: r.cat,
+      title: en ? r.title_en : r.title_ru, note: en ? r.note_en : r.note_ru,
+      item: r.item, source: PRIV_META ? PRIV_META.source : '',
+    }));
+  }
+  return out;
+}
+
+// Карточка «Доступ» в настройках
+function accessCard() {
+  if (ACCESS === 'open') return null;
+  const reload = () => { location.href = location.pathname; };
+  if (ACCESS === 'full') {
+    return el('div', { cls: 'card' },
+      el('h3', {}, t('Доступ')),
+      el('div', { cls: 'sm' }, t('Вход выполнен. Реальных находок в устройстве: ') + PRIV.length),
+      PRIV_META ? el('div', { cls: 'xs mut' }, t('Набор от ') + fmtDate((PRIV_META.build || '').slice(0, 10))) : null,
+      el('button', {
+        cls: 'btn sec wide sp', onclick: async () => {
+          if (!confirm(t('Выйти? Реальные находки будут убраны с этого устройства. Ваши инспекции останутся.'))) return;
+          await lockOut(); reload();
+        }
+      }, t('Выйти на этом устройстве')));
+  }
+  return el('div', { cls: 'card' },
+    el('h3', {}, t('Доступ')),
+    el('div', { cls: 'sm' }, t('Демо-режим: реальные находки недоступны.')),
+    el('button', {
+      cls: 'btn wide sp', onclick: () => { localStorage.removeItem('safaMode'); reload(); }
+    }, t('Войти по паролю')));
+}
+
 /* ══════════════ демо-инспекция для показа ══════════════
    Заполненный пример, чтобы приложение не открывалось пустым экраном.
    Правило: демо НИКОГДА не вмешивается в работу инспектора.
@@ -1559,6 +1725,7 @@ async function seedDemo(force) {
   document.documentElement.lang = CFG.d.lang;
   applyNav();
   document.querySelector('nav.tabs button').classList.add('on');
+  try { await gate(); } catch (e) { ACCESS = 'open'; }   // сбой проверки не должен запирать инспектора
   // ?demo=1 — принудительно вернуть учебный пример (для показа)
   const force = /[?&]demo=1/.test(location.search);
   try { await seedDemo(force); } catch (e) {}
