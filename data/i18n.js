@@ -302,4 +302,10 @@ window.SAFA_I18N = {
   "от начала до завершения": "from start to completion",
   "нет данных": "no data",
   "⚠️ Есть находка категории 3 — требуются корректирующие действия до вылета либо ограничение эксплуатации (класс 3a/3b/3c).": "⚠️ There is a category 3 finding — corrective actions before flight or a restriction on operation are required (class 3a/3b/3c).",
+  "Что проверять": "What to check",
+  "Важно: ": "Note: ",
+  "приоритет": "priority",
+  "— приоритетный пункт.": "— priority item.",
+  "Статус пункта": "Item status",
+  "По материалам курса GCAA «SAFA Awareness». Категорию находки определяйте по базе предописанных находок.": "Based on the GCAA SAFA Awareness course. Take the finding category from the pre-described findings base.",
 };
