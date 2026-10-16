@@ -10,7 +10,7 @@ function t(s) { return CFG.d.lang === 'en' && I18N[s] ? I18N[s] : s; }
 // перевод поля структуры данных {ru,en}: при en берём en, если он есть
 const L = o => (o && CFG.d.lang === 'en' && o.en) ? o.en : (o ? o.ru : '');
 
-const APP_VER = '1.7.2';
+const APP_VER = '1.7.3';
 
 /* ══════════════ справочные константы ══════════════ */
 
@@ -1503,6 +1503,12 @@ async function exportAll() {
 
 const PACK_URL = 'data/private.enc';
 const DEMO_DOOR = true;      // ссылка «Демо без пароля» на экране входа (для показа продукта)
+// Открыт во фрейме (внутри «АГА · Платформа») или с ?embed=1: там работают инспекторы, «Демо без пароля» не показываем.
+// Открытый напрямую сайт — без изменений.
+const IN_FRAME = (() => {
+  try { return window.self !== window.top || /[?&]embed(=1|=true)?(&|$)/.test(location.search); }
+  catch (e) { return true; }
+})();
 let PRIV = [];               // оглавление расшифрованного набора
 let PRIV_META = null;        // {build, title, source, tag, salt}
 let ACCESS = 'open';         // open — набора нет · full — вошёл по паролю · demo — без пароля
@@ -1602,7 +1608,7 @@ function lockScreen(pack) {
       el('div', { cls: 'lock-t' }, 'SAFA Inspector'),
       el('div', { cls: 'sm mut', style: 'margin-bottom:14px' }, t('Вход для инспекторов')),
       inp, el('div', { cls: 'sp' }, btn), msg,
-      DEMO_DOOR ? el('button', {
+      DEMO_DOOR && !IN_FRAME ? el('button', {
         cls: 'lock-demo', onclick: () => { localStorage.safaMode = 'demo'; done('demo'); }
       }, t('Демо без пароля')) : null,
       el('div', {}, guideLink('lock-demo', '#ramp')),

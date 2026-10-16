@@ -257,7 +257,7 @@ ul.hn li{margin-bottom:2px}
 <script>
 "use strict";
 const $=s=>document.querySelector(s);
-const VER='v1.7.2';
+const VER='v1.7.3';
 function hdr(title,o){o=o||{};return `<div class="ah">${o.back?'<span class="hb">‹</span>':''}<b>${title}</b><span class="v ${o.hlVer?'hl mid':''}">${VER}</span>${o.act?`<span class="hb ${o.hlAct?'hl mid':''}">${o.act}</span>`:''}</div>`;}
 function tabs(on,hl){const T=[['list','📋','Инспекции'],['ref','📖','Справочник'],['train','🎓','Тренажёр'],['stats','📊','Сводка'],['set','⚙️','Настройки']];
   return `<div class="an">${T.map(t=>`<span class="${t[0]===on?'on':''} ${t[0]===hl?'hl mid':''}"><i>${t[1]}</i>${t[2]}</span>`).join('')}</div>`;}
